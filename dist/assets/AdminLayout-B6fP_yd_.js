@@ -1,0 +1,21 @@
+import{u as r,j as e,N as m,O as x,s as h}from"./index-D015PSEy.js";import{L as b,B as u}from"./layout-dashboard-BuvMshgD.js";import{c as t}from"./createLucideIcon-WjzHNTcX.js";import{U as p}from"./users-CF9_zN2L.js";/**
+ * @license lucide-react v0.539.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const g=[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"M8 18v-1",key:"zg0ygc"}],["path",{d:"M12 18v-6",key:"17g6i2"}],["path",{d:"M16 18v-3",key:"j5jt4h"}]],j=t("file-chart-column",g);/**
+ * @license lucide-react v0.539.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const y=[["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"M16 22h2a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3",key:"37hlfg"}],["path",{d:"M8 14v2.2l1.6 1",key:"6m4bie"}],["circle",{cx:"8",cy:"16",r:"6",key:"10v15b"}]],f=t("file-clock",y);/**
+ * @license lucide-react v0.539.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const N=[["path",{d:"m16 17 5-5-5-5",key:"1bji2h"}],["path",{d:"M21 12H9",key:"dn1m92"}],["path",{d:"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4",key:"1uf3rs"}]],v=t("log-out",N);/**
+ * @license lucide-react v0.539.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const k=[["path",{d:"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915",key:"1i5ecw"}],["circle",{cx:"12",cy:"12",r:"3",key:"1v7zrd"}]],M=t("settings",k),w=[{to:"/admin",label:"Dashboard",icon:b,end:!0},{to:"/admin/dtr-submissions",label:"DTR Submissions",icon:f},{to:"/admin/users",label:"Users",icon:p},{to:"/admin/reports",label:"Reports",icon:j},{to:"/admin/settings",label:"Settings",icon:M}];function O({profile:s}){const n=r();async function l(){await h.auth.signOut(),n("/login")}return e.jsxs("div",{className:"flex min-h-screen bg-slate-100",children:[e.jsxs("aside",{className:"hidden w-72 flex-col bg-slate-900 text-white md:flex",children:[e.jsx("div",{className:"border-b border-slate-700 p-5",children:e.jsx("p",{className:"rounded-lg bg-brand-500 px-3 py-1 text-sm font-bold inline-block",children:"OMGJ Admin"})}),e.jsx("nav",{className:"flex-1 p-3",children:w.map(({to:a,label:i,icon:d,end:c})=>e.jsxs(m,{to:a,end:c,className:({isActive:o})=>`mb-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition ${o?"bg-brand-500 text-white":"text-slate-200 hover:bg-slate-800"}`,children:[e.jsx(d,{size:16})," ",i]},a))}),e.jsxs("button",{className:"m-3 flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-200 hover:bg-slate-800",onClick:l,children:[e.jsx(v,{size:16})," Logout"]})]}),e.jsxs("div",{className:"flex-1",children:[e.jsxs("header",{className:"sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 md:px-6",children:[e.jsx("h1",{className:"text-lg font-semibold text-slate-800",children:"Admin Dashboard"}),e.jsxs("div",{className:"flex items-center gap-3",children:[e.jsxs("button",{className:"relative rounded-full border border-slate-200 p-2",children:[e.jsx(u,{size:18}),e.jsx("span",{className:"absolute -right-1 -top-1 h-4 min-w-4 rounded-full bg-rose-500 px-1 text-[10px] text-white",children:"2"})]}),e.jsxs("div",{className:"hidden items-center gap-2 rounded-full border border-slate-200 px-2 py-1 sm:flex",children:[e.jsx("div",{className:"flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700",children:((s==null?void 0:s.full_name)||"Admin").slice(0,1)}),e.jsx("span",{className:"text-sm text-slate-700",children:(s==null?void 0:s.full_name)||"Admin User"})]})]})]}),e.jsx("main",{className:"p-4 md:p-6",children:e.jsx(x,{})})]})]})}export{O as default};
