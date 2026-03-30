@@ -26,7 +26,7 @@ export default function AdminReportsPage() {
     setLoading(true);
     const { data } = await supabase
       .from("dtr_submissions")
-      .select("status,created_at,profiles:profiles!dtr_submissions_user_id_fkey(location)")
+      .select("status,created_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(location)")
       .order("created_at", { ascending: false });
     setRows(data ?? []);
     setLoading(false);

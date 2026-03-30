@@ -15,13 +15,13 @@ const AdminUsersPage = lazy(() => import("./features/admin/AdminUsersPage"));
 const AdminSettingsPage = lazy(() => import("./features/admin/AdminSettingsPage"));
 
 export default function App() {
-  const { user, profile, loading, refreshProfile } = useAuth();
+  const { user, profile, loading, authError, refreshProfile } = useAuth();
 
   return (
     <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading module...</div>}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route element={<ProtectedRoute user={user} loading={loading} />}>
+        <Route element={<ProtectedRoute user={user} loading={loading} authError={authError} />}>
           <Route
             path="/onboarding"
             element={<OnboardingPage user={user} refreshProfile={refreshProfile} />}
@@ -50,7 +50,7 @@ export default function App() {
               ) : profile.role === "admin" ? (
                 <Navigate to="/admin" replace />
               ) : (
-                <EmployeeDashboard user={user} profile={profile} />
+                <EmployeeDashboard user={user} profile={profile} refreshProfile={refreshProfile} />
               )
             }
           />

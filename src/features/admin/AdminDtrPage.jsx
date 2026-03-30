@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Search } from "lucide-react";
 import Card from "../../components/ui/Card";
@@ -30,7 +31,7 @@ export default function AdminDtrPage() {
   async function loadRows() {
     const { data, error } = await supabase
       .from("dtr_submissions")
-      .select("id,user_id,cutoff,file_url,status,created_at,profiles:profiles!dtr_submissions_user_id_fkey(full_name,role,employee_id,location)")
+      .select("id,user_id,cutoff,file_url,status,approved_at,created_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,role,employee_id,location)")
       .order("created_at", { ascending: false });
     if (!error) {
       const withSignedUrls = await attachSignedUrls(data || [], "dtr-images");
@@ -71,7 +72,11 @@ export default function AdminDtrPage() {
   async function updateStatus(status) {
     if (!reviewItem) return;
     setLoading(true);
-    const { error } = await supabase.from("dtr_submissions").update({ status }).eq("id", reviewItem.id);
+    const payload = {
+      status,
+      approved_at: status === "Approved" ? new Date().toISOString() : null,
+    };
+    const { error } = await supabase.from("dtr_submissions").update(payload).eq("id", reviewItem.id);
     setLoading(false);
     if (error) {
       toast.error(error.message);
@@ -85,6 +90,16 @@ export default function AdminDtrPage() {
   return (
     <div className="space-y-4">
       <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">Employee DTR Review Queue</h2>
+            <p className="text-sm text-slate-500">All DTR submissions sent by employees appear here for admin approval.</p>
+          </div>
+          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+            {rows.filter((row) => row.status === "Pending Review").length} Pending
+          </span>
+        </div>
+
         <div className="grid gap-3 md:grid-cols-6">
           <Select label="Area" value={filters.area} onChange={(e) => setFilters((p) => ({ ...p, area: e.target.value }))}>
             {areas.map((item) => (
@@ -151,8 +166,10 @@ export default function AdminDtrPage() {
                   <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
                     <th className="pb-2">Employee</th>
                     <th className="pb-2">Employee ID</th>
+                    <th className="pb-2">Selected Cutoff</th>
                     <th className="pb-2">DTR Preview</th>
                     <th className="pb-2">Date Submitted</th>
+                    <th className="pb-2">Date Approved</th>
                     <th className="pb-2">Status</th>
                     <th className="pb-2">Action</th>
                   </tr>
@@ -165,6 +182,7 @@ export default function AdminDtrPage() {
                         <p className="text-xs text-slate-500">{item.profiles?.role || "Employee"}</p>
                       </td>
                       <td className="py-2">{item.profiles?.employee_id || "-"}</td>
+                      <td className="py-2">{item.cutoff || "-"}</td>
                       <td className="py-2">
                         {item.preview_url ? (
                           <img src={item.preview_url} alt="DTR preview" className="h-12 w-16 rounded-md object-cover" />
@@ -175,6 +193,7 @@ export default function AdminDtrPage() {
                         )}
                       </td>
                       <td className="py-2">{new Date(item.created_at).toLocaleString()}</td>
+                      <td className="py-2">{item.approved_at ? new Date(item.approved_at).toLocaleString() : "-"}</td>
                       <td className="py-2">
                         <StatusBadge status={item.status} />
                       </td>
@@ -194,9 +213,25 @@ export default function AdminDtrPage() {
 
       {filtered.length === 0 ? <p className="text-sm text-slate-500">No submissions found.</p> : null}
 
+      <div className="text-sm text-slate-500">
+        Need to review a new employee submission from the dashboard? Open <Link className="font-medium text-brand-600 hover:underline" to="/admin">Dashboard</Link> for the latest activity, then come back here to approve or reject it.
+      </div>
+
       <Modal open={Boolean(reviewItem)} onClose={() => setReviewItem(null)} title="Review DTR Submission">
         {reviewItem ? (
           <div className="space-y-4">
+            <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+              <p>
+                <span className="font-semibold text-slate-800">Selected Cutoff:</span> {reviewItem.cutoff || "Not set"}
+              </p>
+              <p className="mt-1">
+                <span className="font-semibold text-slate-800">Submitted:</span> {new Date(reviewItem.created_at).toLocaleString()}
+              </p>
+              <p className="mt-1">
+                <span className="font-semibold text-slate-800">Approved At:</span>{" "}
+                {reviewItem.approved_at ? new Date(reviewItem.approved_at).toLocaleString() : "Not approved yet"}
+              </p>
+            </div>
             {reviewItem.preview_url ? (
               <img src={reviewItem.preview_url} alt="DTR full preview" className="max-h-[60vh] w-full rounded-xl object-contain" />
             ) : (

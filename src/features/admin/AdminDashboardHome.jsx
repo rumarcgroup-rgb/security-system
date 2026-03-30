@@ -1,28 +1,41 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, CheckCircle2, Clock3, Users } from "lucide-react";
+import { Activity, CheckCircle2, Clock3, FileText, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { supabase } from "../../lib/supabase";
 
 const metricCards = [
-  { key: "pending", label: "Pending DTR", icon: Clock3, tone: "text-amber-600", bg: "bg-amber-50" },
+  { key: "pendingDtr", label: "Pending DTR", icon: Clock3, tone: "text-amber-600", bg: "bg-amber-50" },
+  { key: "pendingRequirements", label: "Pending Requirements", icon: FileText, tone: "text-rose-600", bg: "bg-rose-50" },
   { key: "approvedToday", label: "Approved Today", icon: CheckCircle2, tone: "text-emerald-600", bg: "bg-emerald-50" },
   { key: "activeEmployees", label: "Active Employees", icon: Users, tone: "text-brand-600", bg: "bg-brand-50" },
-  { key: "totalSubmissions", label: "Total Submissions", icon: Activity, tone: "text-slate-800", bg: "bg-slate-100" },
+  { key: "totalEmployeeSubmissions", label: "Total Employee Submissions", icon: Activity, tone: "text-slate-800", bg: "bg-slate-100" },
 ];
 
+function getRequirementTypeLabel(row) {
+  return row.requirement_type === "Signature" ? "Signature" : row.document_type || "Requirement";
+}
+
 export default function AdminDashboardHome() {
-  const [recentRows, setRecentRows] = useState([]);
-  const [allRows, setAllRows] = useState([]);
+  const [recentDtrRows, setRecentDtrRows] = useState([]);
+  const [allDtrRows, setAllDtrRows] = useState([]);
+  const [recentRequirementRows, setRecentRequirementRows] = useState([]);
+  const [allRequirementRows, setAllRequirementRows] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadData();
 
-    const submissionsChannel = supabase
+    const dtrChannel = supabase
       .channel("admin-dashboard-dtr")
       .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, loadData)
+      .subscribe();
+
+    const documentsChannel = supabase
+      .channel("admin-dashboard-documents")
+      .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, loadData)
       .subscribe();
 
     const profilesChannel = supabase
@@ -31,7 +44,8 @@ export default function AdminDashboardHome() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(submissionsChannel);
+      supabase.removeChannel(dtrChannel);
+      supabase.removeChannel(documentsChannel);
       supabase.removeChannel(profilesChannel);
     };
   }, []);
@@ -39,26 +53,67 @@ export default function AdminDashboardHome() {
   async function loadData() {
     setLoading(true);
 
-    const [recentRes, totalsRes, profilesRes] = await Promise.all([
+    const [recentDtrRes, allDtrRes, documentsRes, profilesRes] = await Promise.all([
       supabase
         .from("dtr_submissions")
         .select("id,status,created_at,cutoff,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location)")
         .order("created_at", { ascending: false })
         .limit(8),
       supabase.from("dtr_submissions").select("id,status,created_at").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("id,role,full_name,location").order("created_at", { ascending: false }),
+      supabase
+        .from("employee_documents")
+        .select(
+          "id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_fkey(full_name,employee_id,location)"
+        )
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("profiles")
+        .select("id,role,full_name,location,employee_id,created_at,signature_url,signature_status")
+        .order("created_at", { ascending: false }),
     ]);
 
-    if (!recentRes.error) {
-      setRecentRows(recentRes.data ?? []);
+    if (!recentDtrRes.error) {
+      setRecentDtrRows(recentDtrRes.data ?? []);
     }
 
-    if (!totalsRes.error) {
-      setAllRows(totalsRes.data ?? []);
+    if (!allDtrRes.error) {
+      setAllDtrRows(allDtrRes.data ?? []);
     }
 
     if (!profilesRes.error) {
       setProfiles(profilesRes.data ?? []);
+    }
+
+    if (!documentsRes.error && !profilesRes.error) {
+      const documentRows = (documentsRes.data ?? []).map((row) => ({
+        ...row,
+        requirement_type: row.document_type,
+        status: row.review_status || "Pending Review",
+        source: "employee_documents",
+      }));
+
+      const signatureRows = (profilesRes.data ?? [])
+        .filter((profile) => profile.signature_url)
+        .map((profile) => ({
+          id: `signature-${profile.id}`,
+          document_type: "Signature",
+          requirement_type: "Signature",
+          created_at: profile.created_at,
+          status: profile.signature_status || "Pending Review",
+          profiles: {
+            full_name: profile.full_name,
+            employee_id: profile.employee_id,
+            location: profile.location,
+          },
+          source: "profiles",
+        }));
+
+      const combinedRequirements = [...documentRows, ...signatureRows].sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      );
+
+      setAllRequirementRows(combinedRequirements);
+      setRecentRequirementRows(combinedRequirements.slice(0, 8));
     }
 
     setLoading(false);
@@ -67,18 +122,20 @@ export default function AdminDashboardHome() {
   const metrics = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     const activeEmployees = profiles.filter((profile) => profile.role !== "admin").length;
-    const pending = allRows.filter((row) => row.status === "Pending Review").length;
-    const approvedToday = allRows.filter(
+    const pendingDtr = allDtrRows.filter((row) => row.status === "Pending Review").length;
+    const approvedToday = allDtrRows.filter(
       (row) => row.status === "Approved" && new Date(row.created_at).toISOString().slice(0, 10) === today
     ).length;
+    const pendingRequirements = allRequirementRows.filter((row) => row.status === "Pending Review").length;
 
     return {
-      pending,
+      pendingDtr,
+      pendingRequirements,
       approvedToday,
       activeEmployees,
-      totalSubmissions: allRows.length,
+      totalEmployeeSubmissions: allDtrRows.length + allRequirementRows.length,
     };
-  }, [allRows, profiles]);
+  }, [allDtrRows, allRequirementRows, profiles]);
 
   const locationSummary = useMemo(() => {
     const grouped = profiles.reduce((acc, profile) => {
@@ -100,7 +157,7 @@ export default function AdminDashboardHome() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {metricCards.map(({ key, label, icon: Icon, tone, bg }) => (
           <Card key={key}>
             <div className="flex items-start justify-between gap-3">
@@ -116,14 +173,19 @@ export default function AdminDashboardHome() {
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.5fr,1fr]">
+      <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-800">Recent DTR Activity</h2>
-            <p className="text-xs text-slate-500">Last {recentRows.length} submissions</p>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">Recent DTR Activity</h2>
+              <p className="text-xs text-slate-500">Last {recentDtrRows.length} submissions</p>
+            </div>
+            <Link className="text-sm font-medium text-brand-600 hover:underline" to="/admin/dtr-submissions">
+              Review Queue
+            </Link>
           </div>
           <div className="space-y-3">
-            {recentRows.map((row) => (
+            {recentDtrRows.map((row) => (
               <div
                 key={row.id}
                 className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between"
@@ -138,36 +200,63 @@ export default function AdminDashboardHome() {
                 <StatusBadge status={row.status} />
               </div>
             ))}
-            {recentRows.length === 0 ? <p className="text-sm text-slate-500">No DTR activity yet.</p> : null}
+            {recentDtrRows.length === 0 ? <p className="text-sm text-slate-500">No DTR activity yet.</p> : null}
           </div>
         </Card>
 
         <Card>
-          <h2 className="text-lg font-semibold text-slate-800">Employee Distribution</h2>
-          <p className="mt-1 text-sm text-slate-500">Top assigned locations based on onboarding records.</p>
-          <div className="mt-4 space-y-3">
-            {locationSummary.map((item, index) => (
-              <div key={item.location}>
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="text-slate-700">
-                    {index + 1}. {item.location}
-                  </span>
-                  <span className="font-semibold text-slate-800">{item.count}</span>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-800">Recent Requirement Activity</h2>
+            <p className="text-xs text-slate-500">Employee documents and signatures</p>
+          </div>
+          <div className="space-y-3">
+            {recentRequirementRows.map((row) => (
+              <div
+                key={row.id}
+                className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between"
+              >
+                <div>
+                  <p className="font-semibold text-slate-800">{row.profiles?.full_name || "Unknown Employee"}</p>
+                  <p className="text-sm text-slate-500">
+                    {row.profiles?.employee_id || "No Employee ID"} | {getRequirementTypeLabel(row)}
+                  </p>
+                  <p className="text-xs text-slate-400">{new Date(row.created_at).toLocaleString()}</p>
                 </div>
-                <div className="h-2 rounded-full bg-slate-100">
-                  <div
-                    className="h-2 rounded-full bg-brand-500"
-                    style={{ width: `${Math.max((item.count / locationSummary[0].count) * 100, 8)}%` }}
-                  />
-                </div>
+                <StatusBadge status={row.status} />
               </div>
             ))}
-            {locationSummary.length === 0 ? (
-              <p className="text-sm text-slate-500">No employee location data available yet.</p>
+            {recentRequirementRows.length === 0 ? (
+              <p className="text-sm text-slate-500">No employee requirement activity yet.</p>
             ) : null}
           </div>
         </Card>
       </div>
+
+      <Card>
+        <h2 className="text-lg font-semibold text-slate-800">Employee Distribution</h2>
+        <p className="mt-1 text-sm text-slate-500">Top assigned locations based on onboarding records.</p>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {locationSummary.map((item, index) => (
+            <div key={item.location}>
+              <div className="mb-1 flex items-center justify-between text-sm">
+                <span className="text-slate-700">
+                  {index + 1}. {item.location}
+                </span>
+                <span className="font-semibold text-slate-800">{item.count}</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-100">
+                <div
+                  className="h-2 rounded-full bg-brand-500"
+                  style={{ width: `${Math.max((item.count / locationSummary[0].count) * 100, 8)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+          {locationSummary.length === 0 ? (
+            <p className="text-sm text-slate-500">No employee location data available yet.</p>
+          ) : null}
+        </div>
+      </Card>
     </div>
   );
 }

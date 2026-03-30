@@ -28,8 +28,10 @@ create table if not exists public.dtr_submissions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   cutoff text not null,
+  selected_dtr_date date,
   file_url text not null,
   status text not null default 'Pending Review',
+  approved_at timestamptz,
   created_at timestamptz default now()
 );
 
@@ -42,11 +44,30 @@ create table if not exists public.employee_documents (
   created_at timestamptz default now()
 );
 
+create table if not exists public.profile_change_requests (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  requested_full_name text,
+  requested_avatar_url text,
+  status text not null default 'Pending Review',
+  reviewed_at timestamptz,
+  created_at timestamptz default now()
+);
+
 alter table public.profiles
   add column if not exists signature_status text not null default 'Pending Review';
 
+alter table public.profiles
+  add column if not exists avatar_url text;
+
 alter table public.employee_documents
   add column if not exists review_status text not null default 'Pending Review';
+
+alter table public.dtr_submissions
+  add column if not exists selected_dtr_date date;
+
+alter table public.dtr_submissions
+  add column if not exists approved_at timestamptz;
 
 do $$
 begin
@@ -73,6 +94,16 @@ begin
   if not exists (
     select 1
     from pg_constraint
+    where conname = 'profile_change_requests_user_id_profile_fkey'
+  ) then
+    alter table public.profile_change_requests
+      add constraint profile_change_requests_user_id_profile_fkey
+      foreign key (user_id) references public.profiles(id) on delete cascade;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
     where conname = 'profiles_signature_status_check'
   ) then
     alter table public.profiles
@@ -89,6 +120,16 @@ begin
       add constraint employee_documents_review_status_check
       check (review_status in ('Pending Review', 'Verified', 'Needs Reupload'));
   end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'profile_change_requests_status_check'
+  ) then
+    alter table public.profile_change_requests
+      add constraint profile_change_requests_status_check
+      check (status in ('Pending Review', 'Approved', 'Rejected'));
+  end if;
 end
 $$;
 
@@ -97,12 +138,18 @@ create index if not exists idx_profiles_location on public.profiles(location);
 create index if not exists idx_dtr_submissions_user_id on public.dtr_submissions(user_id);
 create index if not exists idx_dtr_submissions_status on public.dtr_submissions(status);
 create index if not exists idx_dtr_submissions_created_at on public.dtr_submissions(created_at desc);
+create index if not exists idx_dtr_submissions_selected_dtr_date on public.dtr_submissions(selected_dtr_date desc);
+create index if not exists idx_dtr_submissions_approved_at on public.dtr_submissions(approved_at desc);
 create index if not exists idx_employee_documents_user_id on public.employee_documents(user_id);
 create index if not exists idx_employee_documents_review_status on public.employee_documents(review_status);
+create index if not exists idx_profile_change_requests_user_id on public.profile_change_requests(user_id);
+create index if not exists idx_profile_change_requests_status on public.profile_change_requests(status);
+create index if not exists idx_profile_change_requests_created_at on public.profile_change_requests(created_at desc);
 
 alter table public.profiles enable row level security;
 alter table public.dtr_submissions enable row level security;
 alter table public.employee_documents enable row level security;
+alter table public.profile_change_requests enable row level security;
 
 -- Avoid RLS recursion by checking admin role through a SECURITY DEFINER function.
 create or replace function public.is_admin(check_user_id uuid default auth.uid())
@@ -152,6 +199,12 @@ with check (auth.uid() = user_id or public.is_admin(auth.uid()));
 drop policy if exists "users_can_manage_own_documents" on public.employee_documents;
 create policy "users_can_manage_own_documents"
 on public.employee_documents for all
+using (auth.uid() = user_id or public.is_admin(auth.uid()))
+with check (auth.uid() = user_id or public.is_admin(auth.uid()));
+
+drop policy if exists "users_can_manage_own_profile_change_requests" on public.profile_change_requests;
+create policy "users_can_manage_own_profile_change_requests"
+on public.profile_change_requests for all
 using (auth.uid() = user_id or public.is_admin(auth.uid()))
 with check (auth.uid() = user_id or public.is_admin(auth.uid()));
 
