@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { ShieldCheck } from "lucide-react";
 import Card from "../../components/ui/Card";
@@ -10,7 +10,6 @@ import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -51,30 +50,13 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const normalizedEmail = email.trim().toLowerCase();
-
-      if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: normalizedEmail,
-          password,
-        });
-        if (error) throw error;
-        toast.success("Welcome back!");
-        navigate("/", { replace: true });
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email: normalizedEmail,
-          password,
-        });
-        if (error) throw error;
-        if (data.session) {
-          toast.success("Account created. Please finish onboarding.");
-          navigate("/onboarding", { replace: true });
-        } else if (data.user) {
-          toast.success("Account created. Check your email to confirm your account.");
-          setMode("login");
-          setPassword("");
-        }
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+      if (error) throw error;
+      toast.success("Welcome back!");
+      navigate("/", { replace: true });
     } catch (err) {
       const message = err?.message || "Authentication failed";
 
@@ -125,16 +107,13 @@ export default function LoginPage() {
             </div>
           ) : null}
           <Button className="w-full" loading={loading} type="submit">
-            {mode === "login" ? "Login" : "Create Account"}
+            Login
           </Button>
         </form>
 
-        <button
-          className="mt-4 text-sm font-medium text-brand-600 hover:underline"
-          onClick={() => setMode(mode === "login" ? "signup" : "login")}
-        >
-          {mode === "login" ? "Need an account? Sign up" : "Already registered? Login"}
-        </button>
+        <Link className="mt-4 block text-sm font-medium text-brand-600 hover:underline" to="/onboarding">
+          Need an account? Start onboarding
+        </Link>
       </Card>
     </div>
   );

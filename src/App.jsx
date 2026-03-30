@@ -15,17 +15,26 @@ const AdminUsersPage = lazy(() => import("./features/admin/AdminUsersPage"));
 const AdminSettingsPage = lazy(() => import("./features/admin/AdminSettingsPage"));
 
 export default function App() {
-  const { user, profile, loading, authError, refreshProfile } = useAuth();
+  const { user, profile, loading, authError, refreshProfile, resetSession } = useAuth();
 
   return (
     <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading module...</div>}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route element={<ProtectedRoute user={user} loading={loading} authError={authError} />}>
-          <Route
-            path="/onboarding"
-            element={<OnboardingPage user={user} refreshProfile={refreshProfile} />}
-          />
+        <Route
+          path="/onboarding"
+          element={<OnboardingPage user={user} refreshProfile={refreshProfile} />}
+        />
+        <Route
+          element={
+            <ProtectedRoute
+              user={user}
+              loading={loading}
+              authError={authError}
+              onResetSession={resetSession}
+            />
+          }
+        >
 
           <Route
             element={<RoleRoute allowedRole="admin" profile={profile} fallback="/" />}

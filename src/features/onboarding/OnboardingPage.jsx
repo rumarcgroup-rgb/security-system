@@ -9,7 +9,7 @@ import Select from "../../components/ui/Select";
 import { supabase } from "../../lib/supabase";
 
 const steps = [
-  "Welcome",
+  "Account Setup",
   "Basic Information",
   "Government Details",
   "Employment Details",
@@ -25,6 +25,11 @@ export default function OnboardingPage({ user, refreshProfile }) {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [drawing, setDrawing] = useState(false);
+  const [account, setAccount] = useState({
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
   const [form, setForm] = useState({
     first_name: "",
     last_name: "",
@@ -54,6 +59,10 @@ export default function OnboardingPage({ user, refreshProfile }) {
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function setAccountField(key, value) {
+    setAccount((prev) => ({ ...prev, [key]: value }));
   }
 
   function startDraw(e) {
@@ -93,8 +102,33 @@ export default function OnboardingPage({ user, refreshProfile }) {
     if (!form.agree1 || !form.agree2) return toast.error("Please accept all terms.");
     setLoading(true);
     try {
+      let activeUser = user;
+
+      if (!activeUser) {
+        const normalizedEmail = account.email.trim().toLowerCase();
+        if (!normalizedEmail || !account.password) {
+          throw new Error("Please complete your account email and password first.");
+        }
+        if (account.password.length < 6) {
+          throw new Error("Password must be at least 6 characters long.");
+        }
+        if (account.password !== account.confirmPassword) {
+          throw new Error("Password confirmation does not match.");
+        }
+
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password: account.password,
+        });
+        if (signUpError) throw signUpError;
+        if (!signUpData.session?.user) {
+          throw new Error("Account created, but email confirmation is required before onboarding can continue.");
+        }
+        activeUser = signUpData.session.user;
+      }
+
       const signatureData = canvasRef.current.toDataURL("image/png");
-      const signaturePath = `${user.id}/signature-${Date.now()}.png`;
+      const signaturePath = `${activeUser.id}/signature-${Date.now()}.png`;
       const signatureBlob = await (await fetch(signatureData)).blob();
       const sigUpload = await supabase.storage.from("documents").upload(signaturePath, signatureBlob, {
         contentType: "image/png",
@@ -103,7 +137,7 @@ export default function OnboardingPage({ user, refreshProfile }) {
 
       const fullName = `${form.first_name} ${form.last_name}`.trim();
       const { error: profileErr } = await supabase.from("profiles").upsert({
-        id: user.id,
+        id: activeUser.id,
         full_name: fullName,
         role: "employee",
         employee_id: form.employee_id || `EMP-${Math.floor(Math.random() * 90000 + 10000)}`,
@@ -127,11 +161,11 @@ export default function OnboardingPage({ user, refreshProfile }) {
       for (const type of docTypes) {
         if (!docs[type]) continue;
         const ext = docs[type].name.split(".").pop();
-        const path = `${user.id}/${type.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.${ext}`;
+        const path = `${activeUser.id}/${type.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.${ext}`;
         const upload = await supabase.storage.from("documents").upload(path, docs[type], { upsert: true });
         if (upload.error) throw upload.error;
         const { error: docErr } = await supabase.from("employee_documents").insert({
-          user_id: user.id,
+          user_id: activeUser.id,
           document_type: type,
           file_url: path,
         });
@@ -166,11 +200,41 @@ export default function OnboardingPage({ user, refreshProfile }) {
       <Card>
         {step === 1 ? (
           <div className="space-y-4 py-2">
-            <h2 className="text-2xl font-bold">Welcome!</h2>
+            <h2 className="text-2xl font-bold">{user ? "Continue Onboarding" : "Create Your Account"}</h2>
             <p className="text-sm text-slate-600">
-              Maligayang pagdating sa onboarding portal. Kumpletuhin ang registration para makapagsumite ka ng DTR at
-              makita ang iyong records.
+              Kumpletuhin ang registration para makapagsumite ka ng DTR at makita ang iyong employee records.
             </p>
+
+            {!user ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input
+                  className="md:col-span-2"
+                  label="Email Address"
+                  type="email"
+                  value={account.email}
+                  onChange={(e) => setAccountField("email", e.target.value)}
+                />
+                <Input
+                  label="Password"
+                  type="password"
+                  minLength={6}
+                  value={account.password}
+                  onChange={(e) => setAccountField("password", e.target.value)}
+                />
+                <Input
+                  label="Confirm Password"
+                  type="password"
+                  minLength={6}
+                  value={account.confirmPassword}
+                  onChange={(e) => setAccountField("confirmPassword", e.target.value)}
+                />
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-700">
+                Your account is already signed in. Continue filling out your employee onboarding details below.
+              </div>
+            )}
+
             <Button onClick={() => setStep(2)}>Start Registration</Button>
             <Link className="block text-sm font-medium text-brand-600 hover:underline" to="/login">
               Already Registered? Login
