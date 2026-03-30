@@ -17,6 +17,8 @@ import {
   RefreshCw,
   UserRound,
   PencilLine,
+  IdCard,
+  MapPin,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion } from "framer-motion";
@@ -29,6 +31,7 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import { supabase } from "../../lib/supabase";
 import { attachSignedUrls } from "../../lib/storage";
 import { buildCutoffOptions } from "../../lib/dtr";
+import employeeCardBackground from "../../assets/employee-card-bg.jpg";
 
 const REQUIRED_DOCUMENTS = ["Valid ID", "NBI Clearance", "Medical Certificate", "Barangay Clearance", "Signature"];
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -594,8 +597,8 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             document.review_status === "Verified"
               ? "This requirement has been cleared by admin."
               : document.review_status === "Needs Reupload"
-              ? "Admin requested a replacement upload for this requirement."
-              : "This file is still pending review.",
+                ? "Admin requested a replacement upload for this requirement."
+                : "This file is still pending review.",
           createdAt: document.created_at,
         });
       });
@@ -608,8 +611,8 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
           profileChangeRequest.status === "Pending Review"
             ? "Your requested profile updates are still waiting for admin approval."
             : profileChangeRequest.status === "Approved"
-            ? "Your profile update request has been approved."
-            : "Your profile update request was rejected and may need changes.",
+              ? "Your profile update request has been approved."
+              : "Your profile update request was rejected and may need changes.",
         createdAt: profileChangeRequest.reviewed_at || profileChangeRequest.created_at,
       });
     }
@@ -682,26 +685,40 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
       </header>
 
       <main className="space-y-4 p-4">
-        <Card className="bg-gradient-to-r from-brand-500 to-brand-600 text-white">
-          <div className="flex items-center gap-3">
-            <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-white/20 text-xl font-bold">
+        <h2 className="text-lg font-semibold">My Profile</h2>
+        <Card className="border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xl font-bold text-brand-700">
               {person.avatar_preview_url ? (
                 <img src={person.avatar_preview_url} alt={person.full_name} className="h-full w-full object-cover" />
               ) : (
                 person.full_name
                   .split(" ")
-                  .slice(0, 2)
+                  .slice(0, 4)
                   .map((n) => n[0])
                   .join("")
               )}
             </div>
+
             <div>
-              <h2 className="text-lg font-semibold">{person.full_name}</h2>
-              <p className="text-sm opacity-90">{person.role}</p>
-              <p className="text-xs opacity-80">
-                {person.employee_id} | {person.location}
-              </p>
+              <h2 className="text-lg font-semibold text-slate-800">{person.full_name}</h2>
+              <p className="text-sm text-slate-500">{person.role}</p>
             </div>
+          </div>
+
+          <div className="my-4 h-px bg-slate-200" />
+
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600">
+            <span className="inline-flex items-center gap-1.5">
+              <IdCard size={14} className="text-slate-500" />
+              <span className="font-medium text-slate-500">Employee ID:</span>
+              <span>{person.employee_id}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <MapPin size={14} className="text-slate-500" />
+              <span className="font-medium text-slate-500">Location:</span>
+              <span>{person.location}</span>
+            </span>
           </div>
         </Card>
 
@@ -804,36 +821,36 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             {documentsLoading ? <p className="text-sm text-slate-500">Loading documents...</p> : null}
             {!documentsLoading
               ? documents.map((document) => {
-                  const Icon = getDocumentIcon(document.file_url);
+                const Icon = getDocumentIcon(document.file_url);
 
-                  return (
-                    <button
-                      key={document.id}
-                      className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-left transition hover:border-brand-300 hover:bg-white"
-                      onClick={() => {
-                        setReplacementFile(null);
-                        setActiveDocument(document);
-                      }}
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="rounded-xl bg-white p-2 text-slate-600 shadow-sm">
-                          <Icon size={18} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-slate-800">{document.document_type}</p>
-                          <p className="truncate text-xs text-slate-500">
-                            {document.created_at
-                              ? new Date(document.created_at).toLocaleString()
-                              : document.is_missing
+                return (
+                  <button
+                    key={document.id}
+                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-left transition hover:border-brand-300 hover:bg-white"
+                    onClick={() => {
+                      setReplacementFile(null);
+                      setActiveDocument(document);
+                    }}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="rounded-xl bg-white p-2 text-slate-600 shadow-sm">
+                        <Icon size={18} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-800">{document.document_type}</p>
+                        <p className="truncate text-xs text-slate-500">
+                          {document.created_at
+                            ? new Date(document.created_at).toLocaleString()
+                            : document.is_missing
                               ? "Upload required"
                               : "Waiting for timestamp"}
-                          </p>
-                        </div>
+                        </p>
                       </div>
-                      <StatusBadge status={document.review_status} />
-                    </button>
-                  );
-                })
+                    </div>
+                    <StatusBadge status={document.review_status} />
+                  </button>
+                );
+              })
               : null}
             {!documentsLoading && documents.length === 0 ? (
               <p className="text-sm text-slate-500">No uploaded documents found yet.</p>
@@ -958,37 +975,83 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
 
       <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="More Actions">
         <div className="space-y-4">
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-brand-500/10 text-brand-700">
+          <div
+            className="relative overflow-hidden rounded-[30px] p-6 text-white shadow-[0_20px_45px_rgba(24,59,120,0.28)] ring-1 ring-white/10"
+            style={{
+              backgroundImage: `linear-gradient(135deg, rgba(18,49,102,0.88) 0%, rgba(38,86,166,0.72) 55%, rgba(22,57,118,0.9) 100%), url(${employeeCardBackground})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }}
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.08),transparent_22%)]" />
+            <div className="absolute -left-10 bottom-2 h-24 w-24 rounded-full bg-white/6 blur-[1px]" />
+            <div className="absolute -right-7 -top-10 h-28 w-28 rounded-full bg-white/10" />
+            <div className="absolute inset-x-0 top-0 h-px bg-white/30" />
+
+            <div className="relative flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[2rem] font-bold leading-tight tracking-[-0.02em]">{person.full_name}</p>
+                <p className="mt-1.5 text-sm font-semibold uppercase tracking-[0.22em] text-white/78">
+                  {String(person.role || "Employee").toUpperCase()}
+                </p>
+              </div>
+
+              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-2 border-white/80 bg-white text-base font-semibold text-[#234b93] shadow-[0_10px_25px_rgba(15,23,42,0.18)]">
                 {person.avatar_preview_url ? (
                   <img src={person.avatar_preview_url} alt={person.full_name} className="h-full w-full object-cover" />
                 ) : (
-                  <UserRound size={18} />
+                  person.full_name
+                    .split(" ")
+                    .slice(0, 2)
+                    .map((part) => part[0])
+                    .join("")
                 )}
               </div>
+            </div>
+
+            <div className="relative mt-7 grid grid-cols-2 gap-x-7 gap-y-5">
               <div>
-                <p className="font-semibold text-slate-800">{person.full_name}</p>
-                <p className="text-sm text-slate-500">
-                  {person.employee_id} | {person.role}
-                </p>
-                <p className="text-xs text-slate-400">{person.location}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">Employee ID</p>
+                <p className="mt-1.5 text-[2rem] font-bold leading-none">{person.employee_id || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">TIN Number</p>
+                <p className="mt-1.5 text-[2rem] font-bold leading-none">{profileRow?.tin || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">SSS Number</p>
+                <p className="mt-1.5 text-[2rem] font-bold leading-none">{profileRow?.sss || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">PhilHealth</p>
+                <p className="mt-1.5 text-[2rem] font-bold leading-none">{profileRow?.philhealth || "N/A"}</p>
+              </div>
+            </div>
+
+            <div className="relative mt-6 flex items-center justify-between border-t border-white/15 pt-4">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/82">Valid Entry</p>
+              <div className="rounded-full border border-white/15 bg-white/10 p-2">
+                <ShieldCheck size={16} className="text-white/90" />
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="rounded-[26px] border border-slate-200/90 bg-white p-5 shadow-[0_14px_30px_rgba(15,23,42,0.06)]">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-800">Profile Edit Request</p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="text-base font-semibold text-slate-800">Profile Edit Request</p>
+                <p className="mt-1 text-sm text-slate-500">
                   Name and profile picture changes must be approved by admin before they go live.
                 </p>
               </div>
               {profileRequestLoading ? null : profileChangeRequest ? <StatusBadge status={profileChangeRequest.status} /> : null}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="secondary" className="justify-start" onClick={openEditProfileModal}>
+              <Button
+                variant="secondary"
+                className="justify-start rounded-2xl border-slate-200 bg-slate-50 px-4 py-3 text-slate-700 shadow-sm"
+                onClick={openEditProfileModal}
+              >
                 <PencilLine size={16} />
                 {profileChangeRequest?.status === "Pending Review" ? "Update Pending Request" : "Edit Profile"}
               </Button>
@@ -996,34 +1059,46 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             {profileRequestLoading ? (
               <p className="mt-3 text-sm text-slate-500">Loading request status...</p>
             ) : profileChangeRequest ? (
-              <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
-                <p className="font-medium text-slate-700">{getStatusCopy(profileChangeRequest.status)}</p>
-                <p className="mt-1">Requested name: {profileChangeRequest.requested_full_name || person.full_name}</p>
-                <p className="mt-1 text-xs text-slate-500">
+              <div className="mt-4 rounded-[20px] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] p-4 text-sm text-slate-600 ring-1 ring-slate-100">
+                <p className="font-semibold text-slate-700">{getStatusCopy(profileChangeRequest.status)}</p>
+                <p className="mt-2">Requested name: {profileChangeRequest.requested_full_name || person.full_name}</p>
+                <p className="mt-2 text-xs text-slate-500">
                   Birthday: {profileChangeRequest.requested_birthday || profileRow?.birthday || "Not set"} | Gender:{" "}
                   {profileChangeRequest.requested_gender || profileRow?.gender || "Not set"}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-slate-500">
                   Submitted {new Date(profileChangeRequest.created_at).toLocaleString()}
                 </p>
               </div>
             ) : (
-              <p className="mt-3 text-sm text-slate-500">No profile edit request submitted yet.</p>
+              <div className="mt-4 rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                No profile edit request submitted yet.
+              </div>
             )}
           </div>
 
           <div className="grid gap-2">
-            <Button variant="secondary" className="w-full justify-start" loading={refreshing} onClick={refreshDashboard}>
+            <Button
+              variant="secondary"
+              className="w-full justify-center rounded-2xl border-slate-200 bg-white py-3 text-slate-700 shadow-sm"
+              loading={refreshing}
+              onClick={refreshDashboard}
+            >
               <RefreshCw size={16} />
               Refresh Dashboard
             </Button>
-            <Button variant="danger" className="w-full justify-start" loading={loggingOut} onClick={handleLogout}>
+            <Button
+              variant="danger"
+              className="w-full justify-center rounded-2xl border-0 py-3 shadow-[0_16px_30px_rgba(244,63,94,0.24)]"
+              loading={loggingOut}
+              onClick={handleLogout}
+            >
               <LogOut size={16} />
               Sign Out
             </Button>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+          <div className="rounded-[22px] border border-slate-200 bg-white/90 p-4 text-sm text-slate-600 shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
             You currently have {summary.flaggedDocs} file{summary.flaggedDocs === 1 ? "" : "s"} that need attention and{" "}
             {summary.pendingDtrs} DTR submission{summary.pendingDtrs === 1 ? "" : "s"} still pending review.
           </div>
