@@ -31,7 +31,7 @@ export default function AdminDtrPage() {
   async function loadRows() {
     const { data, error } = await supabase
       .from("dtr_submissions")
-      .select("id,user_id,cutoff,file_url,status,approved_at,created_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,role,employee_id,location)")
+      .select("id,user_id,cutoff,employee_note,file_url,status,approved_at,created_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,role,employee_id,location)")
       .order("created_at", { ascending: false });
     if (!error) {
       const withSignedUrls = await attachSignedUrls(data || [], "dtr-images");
@@ -230,6 +230,10 @@ export default function AdminDtrPage() {
               <p className="mt-1">
                 <span className="font-semibold text-slate-800">Approved At:</span>{" "}
                 {reviewItem.approved_at ? new Date(reviewItem.approved_at).toLocaleString() : "Not approved yet"}
+              </p>
+              <p className="mt-1">
+                <span className="font-semibold text-slate-800">Employee Note:</span>{" "}
+                {reviewItem.employee_note?.trim() || "No note provided"}
               </p>
             </div>
             {reviewItem.preview_url ? (

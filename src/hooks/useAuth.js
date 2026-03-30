@@ -1,35 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { attachSignedUrls } from "../lib/storage";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
-
-function isRetryableSessionError(message = "") {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("refresh token") ||
-    normalized.includes("invalid jwt") ||
-    normalized.includes("jwt") ||
-    normalized.includes("session") ||
-    normalized.includes("token") ||
-    normalized.includes("auth")
-  );
-}
-
-function clearStoredSupabaseAuth() {
-  if (typeof window === "undefined") return;
-
-  const clearStore = (store) => {
-    const keys = [];
-    for (let index = 0; index < store.length; index += 1) {
-      const key = store.key(index);
-      if (key?.startsWith("sb-")) {
-        keys.push(key);
-      }
-    }
-    keys.forEach((key) => store.removeItem(key));
-  };
-
-  clearStore(window.localStorage);
-  clearStore(window.sessionStorage);
-}
+import { clearStoredSupabaseAuth, isRetryableSessionError } from "../lib/authSession";
 
 export function useAuth() {
   const [session, setSession] = useState(null);
@@ -118,8 +90,15 @@ export function useAuth() {
       .eq("id", userId)
       .maybeSingle();
     if (error) throw error;
-    setProfile(data ?? null);
-    return data ?? null;
+
+    let nextProfile = data ?? null;
+    if (nextProfile?.avatar_url) {
+      const [withSignedAvatar] = await attachSignedUrls([nextProfile], "documents", "avatar_url");
+      nextProfile = withSignedAvatar ?? nextProfile;
+    }
+
+    setProfile(nextProfile);
+    return nextProfile;
   }
 
   return {

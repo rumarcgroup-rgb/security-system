@@ -22,7 +22,7 @@ export default function AdminLayout({ profile }) {
     <div className="flex min-h-screen bg-slate-100">
       <aside className="hidden w-72 flex-col bg-slate-900 text-white md:flex">
         <div className="border-b border-slate-700 p-5">
-          <p className="rounded-lg bg-brand-500 px-3 py-1 text-sm font-bold inline-block">OMGJ Admin</p>
+          <p className="rounded-lg bg-brand-500 px-3 py-1 text-sm font-bold inline-block">CGROUP of COMPANIES Admin</p>
         </div>
         <nav className="flex-1 p-3">
           {items.map(({ to, label, icon: Icon, end }) => (

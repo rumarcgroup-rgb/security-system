@@ -280,7 +280,7 @@ export default function OnboardingPage({ user, refreshProfile }) {
             </label>
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" checked={form.agree2} onChange={(e) => setField("agree2", e.target.checked)} />
-              I authorize OMGJ to process and store these records for HR and payroll use.
+              I authorize CGROUP of COMPANIES to process and store these records for HR and payroll use.
             </label>
             <div>
               <p className="mb-2 text-sm font-medium">Signature</p>

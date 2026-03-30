@@ -29,6 +29,7 @@ create table if not exists public.dtr_submissions (
   user_id uuid not null references auth.users(id) on delete cascade,
   cutoff text not null,
   selected_dtr_date date,
+  employee_note text,
   file_url text not null,
   status text not null default 'Pending Review',
   approved_at timestamptz,
@@ -49,6 +50,14 @@ create table if not exists public.profile_change_requests (
   user_id uuid not null references auth.users(id) on delete cascade,
   requested_full_name text,
   requested_avatar_url text,
+  requested_birthday date,
+  requested_age int,
+  requested_gender text,
+  requested_civil_status text,
+  requested_sss text,
+  requested_philhealth text,
+  requested_pagibig text,
+  requested_tin text,
   status text not null default 'Pending Review',
   reviewed_at timestamptz,
   created_at timestamptz default now()
@@ -68,6 +77,33 @@ alter table public.dtr_submissions
 
 alter table public.dtr_submissions
   add column if not exists approved_at timestamptz;
+
+alter table public.dtr_submissions
+  add column if not exists employee_note text;
+
+alter table public.profile_change_requests
+  add column if not exists requested_birthday date;
+
+alter table public.profile_change_requests
+  add column if not exists requested_age int;
+
+alter table public.profile_change_requests
+  add column if not exists requested_gender text;
+
+alter table public.profile_change_requests
+  add column if not exists requested_civil_status text;
+
+alter table public.profile_change_requests
+  add column if not exists requested_sss text;
+
+alter table public.profile_change_requests
+  add column if not exists requested_philhealth text;
+
+alter table public.profile_change_requests
+  add column if not exists requested_pagibig text;
+
+alter table public.profile_change_requests
+  add column if not exists requested_tin text;
 
 do $$
 begin

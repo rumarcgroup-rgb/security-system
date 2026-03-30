@@ -3,6 +3,7 @@ import { ExternalLink, FileImage, FileText, Search, ShieldCheck, UserRound } fro
 import toast from "react-hot-toast";
 import Card from "../../components/ui/Card";
 import Select from "../../components/ui/Select";
+import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -33,6 +34,9 @@ export default function AdminUsersPage() {
   const [savingDocumentId, setSavingDocumentId] = useState(null);
   const [reviewRequest, setReviewRequest] = useState(null);
   const [savingRequestId, setSavingRequestId] = useState(null);
+  const [assignmentProfile, setAssignmentProfile] = useState(null);
+  const [assignmentForm, setAssignmentForm] = useState({ location: "", position: "" });
+  const [savingAssignment, setSavingAssignment] = useState(false);
 
   useEffect(() => {
     loadPageData();
@@ -67,7 +71,7 @@ export default function AdminUsersPage() {
     const { data, error } = await supabase
       .from("profile_change_requests")
       .select(
-        "id,user_id,requested_full_name,requested_avatar_url,status,created_at,profiles:profiles!profile_change_requests_user_id_profile_fkey(full_name,employee_id,location,avatar_url)"
+        "id,user_id,requested_full_name,requested_avatar_url,requested_birthday,requested_age,requested_gender,requested_civil_status,requested_sss,requested_philhealth,requested_pagibig,requested_tin,status,created_at,profiles:profiles!profile_change_requests_user_id_profile_fkey(full_name,employee_id,location,avatar_url,birthday,age,gender,civil_status,sss,philhealth,pagibig,tin)"
       )
       .eq("status", "Pending Review")
       .order("created_at", { ascending: false });
@@ -178,6 +182,44 @@ export default function AdminUsersPage() {
     setSavingRequestId(null);
   }
 
+  function openAssignmentEditor(profile) {
+    setAssignmentProfile(profile);
+    setAssignmentForm({
+      location: profile.location || "",
+      position: profile.position || "",
+    });
+  }
+
+  function closeAssignmentEditor() {
+    setAssignmentProfile(null);
+    setAssignmentForm({ location: "", position: "" });
+    setSavingAssignment(false);
+  }
+
+  async function saveAssignment() {
+    if (!assignmentProfile?.id) return;
+
+    const payload = {
+      location: assignmentForm.location.trim() || null,
+      position: assignmentForm.position.trim() || null,
+    };
+
+    setSavingAssignment(true);
+    const { error } = await supabase.from("profiles").update(payload).eq("id", assignmentProfile.id);
+    setSavingAssignment(false);
+
+    if (error) {
+      toast.error(error.message || "Unable to update assignment.");
+      return;
+    }
+
+    setProfiles((current) =>
+      current.map((profile) => (profile.id === assignmentProfile.id ? { ...profile, ...payload } : profile))
+    );
+    toast.success("Employee assignment updated.");
+    closeAssignmentEditor();
+  }
+
   async function updateDocumentStatus(document, nextStatus) {
     if (!document || document.is_missing) return;
 
@@ -222,6 +264,14 @@ export default function AdminUsersPage() {
           .update({
             full_name: request.requested_full_name || request.profiles?.full_name || null,
             avatar_url: request.requested_avatar_url || request.profiles?.avatar_url || null,
+            birthday: request.requested_birthday || null,
+            age: request.requested_age ?? null,
+            gender: request.requested_gender || null,
+            civil_status: request.requested_civil_status || null,
+            sss: request.requested_sss || null,
+            philhealth: request.requested_philhealth || null,
+            pagibig: request.requested_pagibig || null,
+            tin: request.requested_tin || null,
           })
           .eq("id", request.user_id);
         if (profileError) throw profileError;
@@ -388,6 +438,13 @@ export default function AdminUsersPage() {
                     <p className="text-xs text-slate-400">
                       Shift: {profile.shift || "Not set"} | Supervisor: {profile.supervisor || "Not set"}
                     </p>
+                    <Button
+                      variant="secondary"
+                      className="mt-3"
+                      onClick={() => openAssignmentEditor(profile)}
+                    >
+                      Edit Assignment
+                    </Button>
                   </td>
                   <td className="py-4 text-xs text-slate-500">
                     <p>SSS: {profile.sss || "-"}</p>
@@ -548,12 +605,37 @@ export default function AdminUsersPage() {
                 <p className="mt-3 text-sm font-semibold text-slate-800">{reviewRequest.profiles?.full_name || "No current name"}</p>
                 <p className="text-xs text-slate-500">{reviewRequest.profiles?.employee_id || "No employee ID"}</p>
                 <p className="mt-1 text-xs text-slate-400">{reviewRequest.profiles?.location || "No location"}</p>
+                <p className="mt-3 text-xs text-slate-500">
+                  Birthday: {reviewRequest.profiles?.birthday || "Not set"} | Age: {reviewRequest.profiles?.age ?? "Not set"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Gender: {reviewRequest.profiles?.gender || "Not set"} | Civil Status: {reviewRequest.profiles?.civil_status || "Not set"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  SSS: {reviewRequest.profiles?.sss || "-"} | PhilHealth: {reviewRequest.profiles?.philhealth || "-"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Pag-IBIG: {reviewRequest.profiles?.pagibig || "-"} | TIN: {reviewRequest.profiles?.tin || "-"}
+                </p>
               </div>
 
               <div className="rounded-2xl border border-brand-200 bg-brand-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Requested Update</p>
                 <p className="mt-3 text-sm font-semibold text-slate-800">{reviewRequest.requested_full_name || "No requested name"}</p>
                 <p className="text-xs text-slate-500">{new Date(reviewRequest.created_at).toLocaleString()}</p>
+                <p className="mt-3 text-xs text-slate-600">
+                  Birthday: {reviewRequest.requested_birthday || "Not set"} | Age: {reviewRequest.requested_age ?? "Not set"}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Gender: {reviewRequest.requested_gender || "Not set"} | Civil Status:{" "}
+                  {reviewRequest.requested_civil_status || "Not set"}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  SSS: {reviewRequest.requested_sss || "-"} | PhilHealth: {reviewRequest.requested_philhealth || "-"}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Pag-IBIG: {reviewRequest.requested_pagibig || "-"} | TIN: {reviewRequest.requested_tin || "-"}
+                </p>
                 <StatusBadge status={reviewRequest.status} />
               </div>
             </div>
@@ -609,6 +691,39 @@ export default function AdminUsersPage() {
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(assignmentProfile)}
+        onClose={closeAssignmentEditor}
+        title={assignmentProfile ? `Edit Assignment for ${assignmentProfile.full_name || "Employee"}` : "Edit Assignment"}
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+            Update the employee's assigned location and job description here. This saves directly to their live profile.
+          </div>
+
+          <Input
+            label="Assigned Location"
+            value={assignmentForm.location}
+            onChange={(e) => setAssignmentForm((current) => ({ ...current, location: e.target.value }))}
+          />
+
+          <Input
+            label="Job Description"
+            value={assignmentForm.position}
+            onChange={(e) => setAssignmentForm((current) => ({ ...current, position: e.target.value }))}
+          />
+
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={closeAssignmentEditor} disabled={savingAssignment}>
+              Cancel
+            </Button>
+            <Button loading={savingAssignment} onClick={saveAssignment}>
+              Save Changes
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

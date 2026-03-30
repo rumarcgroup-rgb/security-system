@@ -33,6 +33,8 @@ import { buildCutoffOptions } from "../../lib/dtr";
 const REQUIRED_DOCUMENTS = ["Valid ID", "NBI Clearance", "Medical Certificate", "Barangay Clearance", "Signature"];
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const DOCUMENT_TYPES = [...IMAGE_TYPES, "application/pdf"];
+const GENDER_OPTIONS = ["Male", "Female"];
+const CIVIL_STATUS_OPTIONS = ["Single", "Married", "Widowed"];
 
 function isPdfFile(path = "") {
   return /\.pdf($|\?)/i.test(path);
@@ -73,11 +75,17 @@ function getStatusCopy(status) {
   return "Waiting for admin approval";
 }
 
+function formatDateTime(value) {
+  if (!value) return "No date available";
+  return new Date(value).toLocaleString();
+}
+
 export default function EmployeeDashboard({ user, profile, refreshProfile }) {
   const navigate = useNavigate();
   const cutoffOptions = useMemo(() => buildCutoffOptions(new Date(), 4), []);
   const [cutoff, setCutoff] = useState(() => cutoffOptions[0]);
   const [file, setFile] = useState(null);
+  const [employeeNote, setEmployeeNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submissions, setSubmissions] = useState([]);
   const [profileRow, setProfileRow] = useState(profile);
@@ -85,6 +93,10 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
   const [documents, setDocuments] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [activeDocument, setActiveDocument] = useState(null);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  const [seenNotificationIds, setSeenNotificationIds] = useState([]);
   const [moreOpen, setMoreOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -93,7 +105,17 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
   const [uploadingRequirement, setUploadingRequirement] = useState(false);
   const [submittingProfileRequest, setSubmittingProfileRequest] = useState(false);
   const [profileRequestLoading, setProfileRequestLoading] = useState(false);
-  const [editProfileName, setEditProfileName] = useState("");
+  const [editProfileForm, setEditProfileForm] = useState({
+    full_name: "",
+    birthday: "",
+    age: "",
+    gender: "Male",
+    civil_status: "Single",
+    sss: "",
+    philhealth: "",
+    pagibig: "",
+    tin: "",
+  });
   const [editProfileImageFile, setEditProfileImageFile] = useState(null);
   const [editProfileImagePreview, setEditProfileImagePreview] = useState("");
 
@@ -265,12 +287,14 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
       const { error: insertError } = await supabase.from("dtr_submissions").insert({
         user_id: user.id,
         cutoff,
+        employee_note: employeeNote.trim() || null,
         file_url: path,
         status: "Pending Review",
         approved_at: null,
       });
       if (insertError) throw insertError;
       setFile(null);
+      setEmployeeNote("");
       toast.success("DTR submitted successfully.");
       await loadSubmissions();
     } catch (err) {
@@ -337,16 +361,25 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
   }
 
   function openEditProfileModal() {
-    setEditProfileName(
-      profileChangeRequest?.status === "Pending Review" ? profileChangeRequest.requested_full_name || person.full_name : person.full_name
-    );
+    const requestSource = profileChangeRequest?.status === "Pending Review" ? profileChangeRequest : null;
+    setEditProfileForm({
+      full_name: requestSource?.requested_full_name ?? profileRow?.full_name ?? "",
+      birthday: requestSource?.requested_birthday ?? profileRow?.birthday ?? "",
+      age: requestSource?.requested_age?.toString?.() ?? profileRow?.age?.toString?.() ?? "",
+      gender: requestSource?.requested_gender ?? profileRow?.gender ?? "Male",
+      civil_status: requestSource?.requested_civil_status ?? profileRow?.civil_status ?? "Single",
+      sss: requestSource?.requested_sss ?? profileRow?.sss ?? "",
+      philhealth: requestSource?.requested_philhealth ?? profileRow?.philhealth ?? "",
+      pagibig: requestSource?.requested_pagibig ?? profileRow?.pagibig ?? "",
+      tin: requestSource?.requested_tin ?? profileRow?.tin ?? "",
+    });
     setEditProfileImageFile(null);
     setEditProfileOpen(true);
     setMoreOpen(false);
   }
 
   async function submitProfileChangeRequest() {
-    const trimmedName = editProfileName.trim();
+    const trimmedName = editProfileForm.full_name.trim();
     if (!trimmedName) {
       toast.error("Please enter your full name.");
       return;
@@ -362,11 +395,31 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
       (editProfileImageFile ? null : profileChangeRequest?.status === "Pending Review" ? profileChangeRequest.requested_avatar_url : null) ??
       profileRow?.avatar_url ??
       null;
-    const hasNameChanged = trimmedName !== (profileRow?.full_name || "").trim();
+    const nextRequestFields = {
+      requested_full_name: trimmedName,
+      requested_birthday: editProfileForm.birthday || null,
+      requested_age: editProfileForm.age ? Number(editProfileForm.age) : null,
+      requested_gender: editProfileForm.gender || null,
+      requested_civil_status: editProfileForm.civil_status || null,
+      requested_sss: editProfileForm.sss.trim() || null,
+      requested_philhealth: editProfileForm.philhealth.trim() || null,
+      requested_pagibig: editProfileForm.pagibig.trim() || null,
+      requested_tin: editProfileForm.tin.trim() || null,
+    };
+    const hasProfileFieldChanges =
+      trimmedName !== (profileRow?.full_name || "").trim() ||
+      (nextRequestFields.requested_birthday || "") !== (profileRow?.birthday || "") ||
+      (nextRequestFields.requested_age ?? null) !== (profileRow?.age ?? null) ||
+      (nextRequestFields.requested_gender || "") !== (profileRow?.gender || "") ||
+      (nextRequestFields.requested_civil_status || "") !== (profileRow?.civil_status || "") ||
+      (nextRequestFields.requested_sss || "") !== (profileRow?.sss || "") ||
+      (nextRequestFields.requested_philhealth || "") !== (profileRow?.philhealth || "") ||
+      (nextRequestFields.requested_pagibig || "") !== (profileRow?.pagibig || "") ||
+      (nextRequestFields.requested_tin || "") !== (profileRow?.tin || "");
     const hasAvatarChanged = Boolean(editProfileImageFile);
 
-    if (!hasNameChanged && !hasAvatarChanged) {
-      toast.error("Please change your name or choose a new profile picture first.");
+    if (!hasProfileFieldChanges && !hasAvatarChanged) {
+      toast.error("Please update at least one personal detail or choose a new profile picture first.");
       return;
     }
 
@@ -386,8 +439,8 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
 
       const payload = {
         user_id: user.id,
-        requested_full_name: trimmedName,
         requested_avatar_url: requestedAvatarUrl,
+        ...nextRequestFields,
         status: "Pending Review",
         reviewed_at: null,
       };
@@ -452,16 +505,176 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
     return { pendingDtrs, approvedDtrs, verifiedDocs, flaggedDocs };
   }, [documents, submissions]);
 
+  const tasks = useMemo(() => {
+    const items = [];
+
+    documents.forEach((document) => {
+      if (document.review_status === "Missing") {
+        items.push({
+          id: `task-missing-${document.id}`,
+          title: `Upload ${document.document_type}`,
+          description: "This requirement is still missing from your employee file.",
+          variant: "danger",
+          actionLabel: "Upload now",
+          action: () => {
+            setTasksOpen(false);
+            setReplacementFile(null);
+            setActiveDocument(document);
+          },
+        });
+      }
+
+      if (document.review_status === "Needs Reupload") {
+        items.push({
+          id: `task-reupload-${document.id}`,
+          title: `Reupload ${document.document_type}`,
+          description: "Admin requested a replacement file before this requirement can be verified.",
+          variant: "secondary",
+          actionLabel: "Open file",
+          action: () => {
+            setTasksOpen(false);
+            setReplacementFile(null);
+            setActiveDocument(document);
+          },
+        });
+      }
+    });
+
+    if (profileChangeRequest?.status === "Rejected") {
+      items.push({
+        id: "task-profile-rejected",
+        title: "Update your profile request",
+        description: "Your last profile update request was rejected. Review it and submit a corrected version.",
+        variant: "secondary",
+        actionLabel: "Edit profile",
+        action: openEditProfileModal,
+      });
+    }
+
+    if (summary.pendingDtrs > 0) {
+      items.push({
+        id: "task-pending-dtr",
+        title: "Wait for DTR approval",
+        description: `${summary.pendingDtrs} DTR submission${summary.pendingDtrs === 1 ? "" : "s"} still waiting in the admin review queue.`,
+        variant: "secondary",
+        actionLabel: "Close",
+        action: () => setTasksOpen(false),
+      });
+    }
+
+    return items;
+  }, [documents, profileChangeRequest?.status, summary.pendingDtrs]);
+
+  const notifications = useMemo(() => {
+    const items = [];
+
+    submissions.slice(0, 4).forEach((submission) => {
+      items.push({
+        id: `notification-dtr-${submission.id}`,
+        title:
+          submission.status === "Approved"
+            ? `DTR approved for ${submission.cutoff}`
+            : `DTR submitted for ${submission.cutoff}`,
+        description:
+          submission.status === "Approved"
+            ? `Approved on ${formatDateTime(submission.approved_at)}.`
+            : `Submitted on ${formatDateTime(submission.created_at)} and waiting for review.`,
+        createdAt: submission.approved_at || submission.created_at,
+      });
+    });
+
+    documents
+      .filter((document) => document.review_status !== "Missing")
+      .slice(0, 4)
+      .forEach((document) => {
+        items.push({
+          id: `notification-doc-${document.id}`,
+          title: `${document.document_type} is ${document.review_status}`,
+          description:
+            document.review_status === "Verified"
+              ? "This requirement has been cleared by admin."
+              : document.review_status === "Needs Reupload"
+              ? "Admin requested a replacement upload for this requirement."
+              : "This file is still pending review.",
+          createdAt: document.created_at,
+        });
+      });
+
+    if (profileChangeRequest) {
+      items.push({
+        id: `notification-profile-${profileChangeRequest.id}`,
+        title: `Profile request ${profileChangeRequest.status}`,
+        description:
+          profileChangeRequest.status === "Pending Review"
+            ? "Your requested profile updates are still waiting for admin approval."
+            : profileChangeRequest.status === "Approved"
+            ? "Your profile update request has been approved."
+            : "Your profile update request was rejected and may need changes.",
+        createdAt: profileChangeRequest.reviewed_at || profileChangeRequest.created_at,
+      });
+    }
+
+    return items
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .slice(0, 8);
+  }, [documents, profileChangeRequest, submissions]);
+
+  const unreadNotificationCount = useMemo(() => {
+    return notifications.filter((notification) => !seenNotificationIds.includes(notification.id)).length;
+  }, [notifications, seenNotificationIds]);
+
+  const messages = useMemo(() => {
+    const items = [
+      {
+        id: "message-admin-review",
+        title: "Admin review support",
+        body: "Your DTRs, requirement uploads, and profile update requests are reviewed from the admin dashboard.",
+      },
+    ];
+
+    if (summary.flaggedDocs > 0) {
+      items.push({
+        id: "message-doc-attention",
+        title: "Requirements need attention",
+        body: `You currently have ${summary.flaggedDocs} requirement${summary.flaggedDocs === 1 ? "" : "s"} that still need upload or reupload.`,
+      });
+    }
+
+    if (profileChangeRequest?.status === "Pending Review") {
+      items.push({
+        id: "message-profile-pending",
+        title: "Profile request in progress",
+        body: "Your personal details stay unchanged until the admin approves the pending request.",
+      });
+    }
+
+    if (items.length === 1) {
+      items.push({
+        id: "message-clear",
+        title: "No urgent employee messages",
+        body: "Everything looks steady right now. Keep an eye on notifications for any admin updates.",
+      });
+    }
+
+    return items;
+  }, [profileChangeRequest?.status, summary.flaggedDocs]);
+
   return (
     <div className="mx-auto min-h-screen w-full max-w-md bg-slate-100 pb-24">
       <header className="sticky top-0 z-20 glass border-b border-slate-200 p-4">
         <div className="flex items-center justify-between">
-          <div className="rounded-xl bg-brand-500 px-3 py-1.5 text-sm font-bold text-white">OMGJ</div>
-          <button className="relative rounded-full bg-white p-2 shadow">
+          <div className="rounded-xl bg-brand-500 px-3 py-1.5 text-sm font-bold text-white">CGROUP</div>
+          <button
+            className="relative rounded-full bg-white p-2 shadow"
+            onClick={() => {
+              setNotificationsOpen(true);
+              setSeenNotificationIds((current) => Array.from(new Set([...current, ...notifications.map((item) => item.id)])));
+            }}
+          >
             <Bell size={18} />
-            {summary.flaggedDocs > 0 ? (
+            {unreadNotificationCount > 0 ? (
               <span className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full bg-rose-500 px-1 text-[10px] text-white">
-                {summary.flaggedDocs}
+                {Math.min(unreadNotificationCount, 9)}
               </span>
             ) : null}
           </button>
@@ -518,11 +731,23 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         <Card>
           <h3 className="mb-3 text-base font-semibold">Submit DTR</h3>
           <div className="space-y-3">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Submit only your final and correct DTR image for the selected cutoff. Double-check the file before sending because admin review is based on the uploaded copy.
+            </div>
             <Select value={cutoff} onChange={(e) => setCutoff(e.target.value)}>
               {cutoffOptions.map((item) => (
                 <option key={item}>{item}</option>
               ))}
             </Select>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Note for Admin</span>
+              <textarea
+                className="min-h-[96px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-brand-500"
+                placeholder="Optional note about this DTR submission"
+                value={employeeNote}
+                onChange={(e) => setEmployeeNote(e.target.value)}
+              />
+            </label>
             <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center transition hover:border-brand-400">
               <div className="mb-2 flex gap-2 text-slate-500">
                 <Camera size={18} />
@@ -551,6 +776,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                   <div>
                     <p className="text-xs text-slate-500">{new Date(row.created_at).toLocaleString()}</p>
                     <p className="text-sm font-medium text-slate-700">{row.cutoff}</p>
+                    {row.employee_note ? <p className="mt-1 text-xs text-slate-500">Note: {row.employee_note}</p> : null}
                     {row.approved_at ? (
                       <p className="text-xs text-emerald-600">Approved: {new Date(row.approved_at).toLocaleString()}</p>
                     ) : null}
@@ -618,11 +844,14 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
 
       <nav className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-md -translate-x-1/2 items-center justify-around border-t border-slate-200 bg-white px-2 py-2">
         <Nav icon={LayoutDashboard} label="Dashboard" />
-        <Nav icon={ListChecks} label="Tasks" />
-        <button className="-mt-8 rounded-full bg-brand-500 p-4 text-white shadow-lg shadow-brand-500/30">
+        <Nav icon={ListChecks} label="Tasks" onClick={() => setTasksOpen(true)} />
+        <button
+          className="-mt-8 rounded-full bg-brand-500 p-4 text-white shadow-lg shadow-brand-500/30"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        >
           <UploadCloud size={20} />
         </button>
-        <Nav icon={MessageSquareText} label="Messages" />
+        <Nav icon={MessageSquareText} label="Messages" onClick={() => setMessagesOpen(true)} />
         <Nav icon={MoreHorizontal} label="More" onClick={() => setMoreOpen(true)} />
       </nav>
 
@@ -771,6 +1000,10 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                 <p className="font-medium text-slate-700">{getStatusCopy(profileChangeRequest.status)}</p>
                 <p className="mt-1">Requested name: {profileChangeRequest.requested_full_name || person.full_name}</p>
                 <p className="mt-1 text-xs text-slate-500">
+                  Birthday: {profileChangeRequest.requested_birthday || profileRow?.birthday || "Not set"} | Gender:{" "}
+                  {profileChangeRequest.requested_gender || profileRow?.gender || "Not set"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
                   Submitted {new Date(profileChangeRequest.created_at).toLocaleString()}
                 </p>
               </div>
@@ -797,12 +1030,67 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         </div>
       </Modal>
 
+      <Modal open={tasksOpen} onClose={() => setTasksOpen(false)} title="My Tasks">
+        <div className="space-y-3">
+          {tasks.length === 0 ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+              You have no urgent employee tasks right now.
+            </div>
+          ) : null}
+
+          {tasks.map((task) => (
+            <div key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-800">{task.title}</p>
+              <p className="mt-1 text-sm text-slate-600">{task.description}</p>
+              <div className="mt-3">
+                <Button className="w-full" variant={task.variant} onClick={task.action}>
+                  {task.actionLabel}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Modal>
+
+      <Modal open={notificationsOpen} onClose={() => setNotificationsOpen(false)} title="Notifications">
+        <div className="space-y-3">
+          {notifications.length === 0 ? <p className="text-sm text-slate-500">No notifications yet.</p> : null}
+
+          {notifications.map((notification) => (
+            <div key={notification.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-800">{notification.title}</p>
+              <p className="mt-1 text-sm text-slate-600">{notification.description}</p>
+              <p className="mt-2 text-xs text-slate-400">{formatDateTime(notification.createdAt)}</p>
+            </div>
+          ))}
+        </div>
+      </Modal>
+
+      <Modal open={messagesOpen} onClose={() => setMessagesOpen(false)} title="Messages">
+        <div className="space-y-3">
+          {messages.map((message) => (
+            <div key={message.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-800">{message.title}</p>
+              <p className="mt-1 text-sm text-slate-600">{message.body}</p>
+            </div>
+          ))}
+
+          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+            Need follow-up? Contact your assigned supervisor or the admin team for document, profile, or DTR concerns.
+          </div>
+        </div>
+      </Modal>
+
       <Modal open={editProfileOpen} onClose={() => setEditProfileOpen(false)} title="Request Profile Update">
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-500">
               {activeProfileRequestAvatar ? (
-                <img src={activeProfileRequestAvatar} alt={editProfileName || person.full_name} className="h-full w-full object-cover" />
+                <img
+                  src={activeProfileRequestAvatar}
+                  alt={editProfileForm.full_name || person.full_name}
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 <UserRound size={24} />
               )}
@@ -813,7 +1101,64 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             </div>
           </div>
 
-          <Input label="Full Name" value={editProfileName} onChange={(e) => setEditProfileName(e.target.value)} />
+          <Input
+            label="Full Name"
+            value={editProfileForm.full_name}
+            onChange={(e) => setEditProfileForm((prev) => ({ ...prev, full_name: e.target.value }))}
+          />
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input
+              label="Birthday"
+              type="date"
+              value={editProfileForm.birthday}
+              onChange={(e) => setEditProfileForm((prev) => ({ ...prev, birthday: e.target.value }))}
+            />
+            <Input
+              label="Age"
+              type="number"
+              value={editProfileForm.age}
+              onChange={(e) => setEditProfileForm((prev) => ({ ...prev, age: e.target.value }))}
+            />
+            <Select
+              label="Gender"
+              value={editProfileForm.gender}
+              onChange={(e) => setEditProfileForm((prev) => ({ ...prev, gender: e.target.value }))}
+            >
+              {GENDER_OPTIONS.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </Select>
+            <Select
+              label="Civil Status"
+              value={editProfileForm.civil_status}
+              onChange={(e) => setEditProfileForm((prev) => ({ ...prev, civil_status: e.target.value }))}
+            >
+              {CIVIL_STATUS_OPTIONS.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </Select>
+            <Input
+              label="SSS"
+              value={editProfileForm.sss}
+              onChange={(e) => setEditProfileForm((prev) => ({ ...prev, sss: e.target.value }))}
+            />
+            <Input
+              label="PhilHealth"
+              value={editProfileForm.philhealth}
+              onChange={(e) => setEditProfileForm((prev) => ({ ...prev, philhealth: e.target.value }))}
+            />
+            <Input
+              label="Pag-IBIG"
+              value={editProfileForm.pagibig}
+              onChange={(e) => setEditProfileForm((prev) => ({ ...prev, pagibig: e.target.value }))}
+            />
+            <Input
+              label="TIN"
+              value={editProfileForm.tin}
+              onChange={(e) => setEditProfileForm((prev) => ({ ...prev, tin: e.target.value }))}
+            />
+          </div>
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-700">Profile Picture</span>
