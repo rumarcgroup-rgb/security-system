@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Search } from "lucide-react";
+import { ExternalLink, Search } from "lucide-react";
 import Card from "../../components/ui/Card";
 import Select from "../../components/ui/Select";
 import Button from "../../components/ui/Button";
@@ -17,6 +17,7 @@ export default function AdminDtrPage() {
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState({ area: "All", cutoff: "All", status: "All", q: "" });
   const [reviewItem, setReviewItem] = useState(null);
+  const [adminRemarks, setAdminRemarks] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export default function AdminDtrPage() {
   async function loadRows() {
     const { data, error } = await supabase
       .from("dtr_submissions")
-      .select("id,user_id,cutoff,employee_note,file_url,status,approved_at,created_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,role,employee_id,location)")
+      .select("id,user_id,cutoff,employee_note,admin_remarks,file_url,status,approved_at,created_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,role,employee_id,location)")
       .order("created_at", { ascending: false });
     if (!error) {
       const withSignedUrls = await attachSignedUrls(data || [], "dtr-images");
@@ -45,7 +46,7 @@ export default function AdminDtrPage() {
   }, [rows]);
 
   const cutoffOptions = useMemo(() => {
-    return ["All", ...mergeCutoffOptions(rows.map((row) => row.cutoff), new Date(), 6)];
+    return ["All", ...mergeCutoffOptions(rows.map((row) => row.cutoff), new Date(), 48)];
   }, [rows]);
 
   const filtered = useMemo(() => {
@@ -74,6 +75,7 @@ export default function AdminDtrPage() {
     setLoading(true);
     const payload = {
       status,
+      admin_remarks: adminRemarks.trim() || null,
       approved_at: status === "Approved" ? new Date().toISOString() : null,
     };
     const { error } = await supabase.from("dtr_submissions").update(payload).eq("id", reviewItem.id);
@@ -82,9 +84,20 @@ export default function AdminDtrPage() {
       toast.error(error.message);
     } else {
       toast.success(`Marked as ${status}`);
+      setAdminRemarks("");
       setReviewItem(null);
       loadRows();
     }
+  }
+
+  function openReview(item) {
+    setReviewItem(item);
+    setAdminRemarks(item.admin_remarks || "");
+  }
+
+  function closeReview() {
+    setReviewItem(null);
+    setAdminRemarks("");
   }
 
   return (
@@ -185,7 +198,13 @@ export default function AdminDtrPage() {
                       <td className="py-2">{item.cutoff || "-"}</td>
                       <td className="py-2">
                         {item.preview_url ? (
-                          <img src={item.preview_url} alt="DTR preview" className="h-12 w-16 rounded-md object-cover" />
+                          <a href={item.preview_url} target="_blank" rel="noreferrer" className="block">
+                            <img
+                              src={item.preview_url}
+                              alt="DTR preview"
+                              className="h-12 w-16 rounded-md object-cover transition hover:opacity-85"
+                            />
+                          </a>
                         ) : (
                           <div className="flex h-12 w-16 items-center justify-center rounded-md bg-slate-100 text-[10px] text-slate-500">
                             No Preview
@@ -198,7 +217,10 @@ export default function AdminDtrPage() {
                         <StatusBadge status={item.status} />
                       </td>
                       <td className="py-2">
-                        <Button className="px-3 py-1.5 text-xs" onClick={() => setReviewItem(item)}>
+                        <Button
+                          className="px-3 py-1.5 text-xs"
+                          onClick={() => openReview(item)}
+                        >
                           Review
                         </Button>
                       </td>
@@ -217,7 +239,7 @@ export default function AdminDtrPage() {
         Need to review a new employee submission from the dashboard? Open <Link className="font-medium text-brand-600 hover:underline" to="/admin">Dashboard</Link> for the latest activity, then come back here to approve or reject it.
       </div>
 
-      <Modal open={Boolean(reviewItem)} onClose={() => setReviewItem(null)} title="Review DTR Submission">
+      <Modal open={Boolean(reviewItem)} onClose={closeReview} title="Review DTR Submission">
         {reviewItem ? (
           <div className="space-y-4">
             <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
@@ -235,15 +257,49 @@ export default function AdminDtrPage() {
                 <span className="font-semibold text-slate-800">Employee Note:</span>{" "}
                 {reviewItem.employee_note?.trim() || "No note provided"}
               </p>
+              <p className="mt-1">
+                <span className="font-semibold text-slate-800">Admin Remarks:</span>{" "}
+                {reviewItem.admin_remarks?.trim() || "No remarks yet"}
+              </p>
             </div>
             {reviewItem.preview_url ? (
-              <img src={reviewItem.preview_url} alt="DTR full preview" className="max-h-[60vh] w-full rounded-xl object-contain" />
+              <a
+                href={reviewItem.preview_url}
+                target="_blank"
+                rel="noreferrer"
+                className="group block overflow-hidden rounded-xl"
+                title="Open submitted image"
+              >
+                <div className="relative">
+                  <img
+                    src={reviewItem.preview_url}
+                    alt="DTR full preview"
+                    className="max-h-[60vh] w-full rounded-xl object-contain transition group-hover:scale-[1.01]"
+                  />
+                  <div className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-full bg-slate-900/70 px-3 py-1 text-xs font-medium text-white opacity-0 transition group-hover:opacity-100">
+                    <ExternalLink size={14} />
+                    View Full Image
+                  </div>
+                </div>
+              </a>
             ) : (
               <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
                 Unable to load preview URL.
               </div>
             )}
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Admin Remarks</span>
+              <textarea
+                className="min-h-[96px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-brand-500"
+                placeholder="Add remarks for the employee before approving or rejecting"
+                value={adminRemarks}
+                onChange={(e) => setAdminRemarks(e.target.value)}
+              />
+            </label>
             <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => updateStatus("Pending Review")} loading={loading}>
+                Return Pending
+              </Button>
               <Button variant="danger" onClick={() => updateStatus("Rejected")} loading={loading}>
                 Reject
               </Button>

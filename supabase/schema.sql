@@ -30,6 +30,7 @@ create table if not exists public.dtr_submissions (
   cutoff text not null,
   selected_dtr_date date,
   employee_note text,
+  admin_remarks text,
   file_url text not null,
   status text not null default 'Pending Review',
   approved_at timestamptz,
@@ -80,6 +81,9 @@ alter table public.dtr_submissions
 
 alter table public.dtr_submissions
   add column if not exists employee_note text;
+
+alter table public.dtr_submissions
+  add column if not exists admin_remarks text;
 
 alter table public.profile_change_requests
   add column if not exists requested_birthday date;

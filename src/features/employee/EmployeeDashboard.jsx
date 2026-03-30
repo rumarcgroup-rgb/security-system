@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bell,
@@ -83,9 +83,16 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString();
 }
 
+function canEditDocument(document) {
+  if (!document) return false;
+  if (document.document_type === "Signature") return true;
+  return Boolean(document.preview_url) || document.is_missing || document.review_status === "Needs Reupload";
+}
+
 export default function EmployeeDashboard({ user, profile, refreshProfile }) {
   const navigate = useNavigate();
-  const cutoffOptions = useMemo(() => buildCutoffOptions(new Date(), 4), []);
+  const signatureCanvasRef = useRef(null);
+  const cutoffOptions = useMemo(() => buildCutoffOptions(new Date(), 48), []);
   const [cutoff, setCutoff] = useState(() => cutoffOptions[0]);
   const [file, setFile] = useState(null);
   const [employeeNote, setEmployeeNote] = useState("");
@@ -105,6 +112,8 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [replacementFile, setReplacementFile] = useState(null);
+  const [isDrawingSignature, setIsDrawingSignature] = useState(false);
+  const [hasSignatureDrawing, setHasSignatureDrawing] = useState(false);
   const [uploadingRequirement, setUploadingRequirement] = useState(false);
   const [submittingProfileRequest, setSubmittingProfileRequest] = useState(false);
   const [profileRequestLoading, setProfileRequestLoading] = useState(false);
@@ -151,6 +160,19 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
 
     return () => URL.revokeObjectURL(objectUrl);
   }, [editProfileImageFile]);
+
+  useEffect(() => {
+    if (!activeDocument || activeDocument.document_type !== "Signature") return;
+
+    window.setTimeout(() => {
+      const canvas = signatureCanvasRef.current;
+      if (!canvas) return;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.beginPath();
+    }, 0);
+  }, [activeDocument]);
 
   async function loadProfileRow() {
     const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
@@ -318,18 +340,36 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
   }
 
   async function uploadRequirement(document) {
-    const validationError = validateRequirementFile(replacementFile, document.document_type);
-    if (validationError) {
-      toast.error(validationError);
-      return;
-    }
-
     setUploadingRequirement(true);
 
     try {
-      const path = buildStoragePath(user.id, document.document_type, replacementFile);
-      const upload = await supabase.storage.from("documents").upload(path, replacementFile, {
-        contentType: replacementFile.type || undefined,
+      let path = "";
+      let contentType;
+      let uploadPayload;
+
+      if (document.document_type === "Signature" && !replacementFile && hasSignatureDrawing) {
+        const canvas = signatureCanvasRef.current;
+        if (!canvas) {
+          throw new Error("Signature pad is unavailable right now.");
+        }
+
+        const signatureBlob = await (await fetch(canvas.toDataURL("image/png"))).blob();
+        path = `${user.id}/signature-${Date.now()}.png`;
+        contentType = "image/png";
+        uploadPayload = signatureBlob;
+      } else {
+        const validationError = validateRequirementFile(replacementFile, document.document_type);
+        if (validationError) {
+          throw new Error(validationError);
+        }
+
+        path = buildStoragePath(user.id, document.document_type, replacementFile);
+        contentType = replacementFile.type || undefined;
+        uploadPayload = replacementFile;
+      }
+
+      const upload = await supabase.storage.from("documents").upload(path, uploadPayload, {
+        contentType,
         upsert: false,
       });
       if (upload.error) throw upload.error;
@@ -354,6 +394,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
       }
 
       setReplacementFile(null);
+      clearSignaturePad();
       toast.success(`${document.document_type} uploaded successfully.`);
       await loadDocuments();
     } catch (err) {
@@ -361,6 +402,72 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
     } finally {
       setUploadingRequirement(false);
     }
+  }
+
+  function clearSignaturePad() {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) {
+      setHasSignatureDrawing(false);
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.beginPath();
+    setHasSignatureDrawing(false);
+  }
+
+  function startSignatureStroke(event) {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+
+    const context = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    const clientX = event.touches?.[0]?.clientX ?? event.clientX;
+    const clientY = event.touches?.[0]?.clientY ?? event.clientY;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+
+    context.lineWidth = 2.5;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "#0f172a";
+    context.beginPath();
+    context.moveTo(x, y);
+
+    setIsDrawingSignature(true);
+    setHasSignatureDrawing(true);
+  }
+
+  function drawSignatureStroke(event) {
+    if (!isDrawingSignature) return;
+
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+
+    const context = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    const clientX = event.touches?.[0]?.clientX ?? event.clientX;
+    const clientY = event.touches?.[0]?.clientY ?? event.clientY;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+
+    context.lineTo(x, y);
+    context.stroke();
+  }
+
+  function endSignatureStroke() {
+    if (!isDrawingSignature) return;
+    const canvas = signatureCanvasRef.current;
+    const context = canvas?.getContext("2d");
+    context?.beginPath();
+    setIsDrawingSignature(false);
   }
 
   function openEditProfileModal() {
@@ -794,6 +901,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                     <p className="text-xs text-slate-500">{new Date(row.created_at).toLocaleString()}</p>
                     <p className="text-sm font-medium text-slate-700">{row.cutoff}</p>
                     {row.employee_note ? <p className="mt-1 text-xs text-slate-500">Note: {row.employee_note}</p> : null}
+                    {row.admin_remarks ? <p className="mt-1 text-xs text-brand-700">Admin remarks: {row.admin_remarks}</p> : null}
                     {row.approved_at ? (
                       <p className="text-xs text-emerald-600">Approved: {new Date(row.approved_at).toLocaleString()}</p>
                     ) : null}
@@ -877,6 +985,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         onClose={() => {
           setActiveDocument(null);
           setReplacementFile(null);
+          clearSignaturePad();
         }}
         title={activeDocument?.document_type || "Document Preview"}
       >
@@ -935,18 +1044,57 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
               </div>
             ) : null}
 
-            {(activeDocument.is_missing || activeDocument.review_status === "Needs Reupload") ? (
+            {canEditDocument(activeDocument) ? (
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div>
                   <p className="text-sm font-semibold text-slate-800">
-                    {activeDocument.is_missing ? "Upload missing requirement" : "Upload replacement"}
+                    {activeDocument.document_type === "Signature"
+                      ? activeDocument.preview_url
+                        ? "Update signature"
+                        : "Upload missing signature"
+                      : activeDocument.preview_url
+                        ? "Upload latest requirement"
+                      : activeDocument.is_missing
+                        ? "Upload missing requirement"
+                        : "Upload replacement"}
                   </p>
                   <p className="text-xs text-slate-500">
                     {activeDocument.document_type === "Signature"
-                      ? "Signature accepts PNG, JPG, or WEBP."
+                      ? "Draw your signature below or upload a PNG, JPG, or WEBP file."
                       : "Accepted files: PNG, JPG, WEBP, or PDF."}
                   </p>
                 </div>
+
+                {activeDocument.document_type === "Signature" ? (
+                  <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-slate-700">Draw Signature</p>
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-rose-600 hover:underline"
+                        onClick={clearSignaturePad}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <canvas
+                      ref={signatureCanvasRef}
+                      width={800}
+                      height={220}
+                      className="w-full rounded-xl border border-slate-300 bg-white touch-none"
+                      onMouseDown={startSignatureStroke}
+                      onMouseMove={drawSignatureStroke}
+                      onMouseUp={endSignatureStroke}
+                      onMouseLeave={endSignatureStroke}
+                      onTouchStart={startSignatureStroke}
+                      onTouchMove={drawSignatureStroke}
+                      onTouchEnd={endSignatureStroke}
+                    />
+                    <p className="text-xs text-slate-500">
+                      Sign using your mouse, touchpad, or phone screen. You can still upload an image file below if you prefer.
+                    </p>
+                  </div>
+                ) : null}
 
                 <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white px-4 py-6 text-center transition hover:border-brand-400">
                   <div className="mb-2 flex gap-2 text-slate-500">
@@ -965,7 +1113,19 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                 </label>
 
                 <Button className="w-full" loading={uploadingRequirement} onClick={() => uploadRequirement(activeDocument)}>
-                  {activeDocument.is_missing ? "Upload Requirement" : "Upload Replacement"}
+                  {activeDocument.document_type === "Signature" && !replacementFile && hasSignatureDrawing
+                    ? activeDocument.preview_url
+                      ? "Update With Drawn Signature"
+                      : "Submit Drawn Signature"
+                    : activeDocument.document_type === "Signature"
+                      ? activeDocument.preview_url
+                        ? "Upload New Signature"
+                        : "Upload Signature"
+                      : activeDocument.preview_url
+                        ? "Upload Latest File"
+                        : activeDocument.is_missing
+                          ? "Upload Requirement"
+                          : "Upload Replacement"}
                 </Button>
               </div>
             ) : null}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Camera, Upload } from "lucide-react";
@@ -18,6 +18,38 @@ const steps = [
 ];
 
 const docTypes = ["Valid ID", "NBI Clearance", "Medical Certificate", "Barangay Clearance"];
+const PENDING_SIGNUP_STORAGE_KEY = "pending-onboarding-signup";
+
+function getPendingSignup() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_SIGNUP_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setPendingSignup(email) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(
+    PENDING_SIGNUP_STORAGE_KEY,
+    JSON.stringify({
+      email,
+      createdAt: new Date().toISOString(),
+    })
+  );
+}
+
+function clearPendingSignup() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(PENDING_SIGNUP_STORAGE_KEY);
+}
+
+function isRateLimitError(message = "") {
+  return /rate limit|too many requests|email rate limit/i.test(message);
+}
 
 export default function OnboardingPage({ user, refreshProfile }) {
   const navigate = useNavigate();
@@ -56,6 +88,18 @@ export default function OnboardingPage({ user, refreshProfile }) {
     "Medical Certificate": null,
     "Barangay Clearance": null,
   });
+  const [pendingSignup, setPendingSignupState] = useState(() => getPendingSignup());
+
+  useEffect(() => {
+    const storedPendingSignup = getPendingSignup();
+    if (storedPendingSignup?.email) {
+      setAccount((prev) => ({
+        ...prev,
+        email: prev.email || storedPendingSignup.email,
+      }));
+      setPendingSignupState(storedPendingSignup);
+    }
+  }, []);
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -116,14 +160,26 @@ export default function OnboardingPage({ user, refreshProfile }) {
           throw new Error("Password confirmation does not match.");
         }
 
+        if (pendingSignup?.email?.toLowerCase() === normalizedEmail) {
+          throw new Error(
+            "This signup is already pending. Please check your email for the confirmation link before trying again."
+          );
+        }
+
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: normalizedEmail,
           password: account.password,
         });
         if (signUpError) throw signUpError;
         if (!signUpData.session?.user) {
-          throw new Error("Account created, but email confirmation is required before onboarding can continue.");
+          setPendingSignup(normalizedEmail);
+          setPendingSignupState(getPendingSignup());
+          throw new Error(
+            "Account created. Check your email and confirm your account first, then log in and continue onboarding."
+          );
         }
+        clearPendingSignup();
+        setPendingSignupState(null);
         activeUser = signUpData.session.user;
       }
 
@@ -173,10 +229,20 @@ export default function OnboardingPage({ user, refreshProfile }) {
       }
 
       await refreshProfile();
+      clearPendingSignup();
+      setPendingSignupState(null);
       toast.success("Onboarding completed.");
       navigate("/");
     } catch (err) {
-      toast.error(err.message || "Onboarding failed");
+      const message = err?.message || "Onboarding failed";
+
+      if (isRateLimitError(message)) {
+        toast.error(
+          "Email sending is temporarily rate limited. If you already signed up, check your inbox first instead of submitting again."
+        );
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -204,6 +270,12 @@ export default function OnboardingPage({ user, refreshProfile }) {
             <p className="text-sm text-slate-600">
               Kumpletuhin ang registration para makapagsumite ka ng DTR at makita ang iyong employee records.
             </p>
+            {pendingSignup?.email && !user ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                A signup request is already pending for <span className="font-semibold">{pendingSignup.email}</span>.
+                Confirm the email first, then log in to continue onboarding.
+              </div>
+            ) : null}
 
             {!user ? (
               <div className="grid gap-3 md:grid-cols-2">
@@ -286,6 +358,7 @@ export default function OnboardingPage({ user, refreshProfile }) {
             <Select label="Assigned Site" value={form.location} onChange={(e) => setField("location", e.target.value)}>
               <option>ABC Building</option>
               <option>XYZ Tower</option>
+              <option>UP</option>
               <option>Main Plant</option>
             </Select>
             <Select label="Position" value={form.position} onChange={(e) => setField("position", e.target.value)}>

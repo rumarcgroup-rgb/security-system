@@ -5,6 +5,7 @@ import ProtectedRoute from "./components/layout/ProtectedRoute";
 import RoleRoute from "./components/layout/RoleRoute";
 
 const LoginPage = lazy(() => import("./features/auth/LoginPage"));
+const ResetPasswordPage = lazy(() => import("./features/auth/ResetPasswordPage"));
 const EmployeeDashboard = lazy(() => import("./features/employee/EmployeeDashboard"));
 const OnboardingPage = lazy(() => import("./features/onboarding/OnboardingPage"));
 const AdminLayout = lazy(() => import("./features/admin/AdminLayout"));
@@ -21,6 +22,8 @@ export default function App() {
     <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading module...</div>}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/login/:portalType" element={<LoginPage />} />
+        <Route path="/reset-password/:portalType" element={<ResetPasswordPage />} />
         <Route
           path="/onboarding"
           element={<OnboardingPage user={user} refreshProfile={refreshProfile} />}
