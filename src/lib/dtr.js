@@ -48,15 +48,15 @@ export function getCutoffLabelFromDate(input = new Date()) {
   return formatCutoffLabel(getCutoffKeyFromDate(input));
 }
 
-export function buildCutoffOptions(referenceDate = new Date(), count = 2) {
-  const start = getCutoffKeyFromDate(referenceDate);
+export function buildCutoffOptions(referenceDate = new Date(), count = 4) {
+  const base = getCutoffKeyFromDate(referenceDate);
   return Array.from({ length: count }, (_, index) => {
-    const cutoff = normalizeCutoffKey(start.year, start.monthIndex, start.half - index);
-    return formatCutoffLabel(cutoff);
+    const normalized = normalizeCutoffKey(base.year, base.monthIndex, base.half - index);
+    return formatCutoffLabel(normalized);
   });
 }
 
-export function mergeCutoffOptions(values = [], referenceDate = new Date(), count = 6) {
+export function mergeCutoffOptions(values = [], referenceDate = new Date(), count = 4) {
   const merged = [...buildCutoffOptions(referenceDate, count), ...values.filter(Boolean)];
   return Array.from(new Set(merged));
 }
