@@ -19,6 +19,7 @@ import {
   PencilLine,
   IdCard,
   MapPin,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion } from "framer-motion";
@@ -1135,6 +1136,17 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
 
       <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="More Actions">
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              aria-label="Close more actions"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+              onClick={() => setMoreOpen(false)}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
           <div
             className="relative overflow-hidden rounded-[30px] p-6 text-white shadow-[0_20px_45px_rgba(24,59,120,0.28)] ring-1 ring-white/10"
             style={{
