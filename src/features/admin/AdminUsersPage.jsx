@@ -9,6 +9,7 @@ import Modal from "../../components/ui/Modal";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { supabase } from "../../lib/supabase";
 import { attachSignedUrls } from "../../lib/storage";
+import { formatLastSeen, isEmployeeOnline } from "../../lib/presence";
 
 const REQUIRED_DOCUMENTS = ["Valid ID", "NBI Clearance", "Medical Certificate", "Barangay Clearance", "Signature"];
 const REVIEWABLE_STATUSES = ["Pending Review", "Verified", "Needs Reupload"];
@@ -19,6 +20,24 @@ function isPdfFile(path = "") {
 
 function getDocumentIcon(path = "") {
   return isPdfFile(path) ? FileText : FileImage;
+}
+
+function PresenceBadge({ lastSeenAt }) {
+  const online = isEmployeeOnline(lastSeenAt);
+
+  return (
+    <div className="space-y-1">
+      <span
+        className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${
+          online ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+        }`}
+      >
+        <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-slate-400"}`} />
+        {online ? "Online" : "Offline"}
+      </span>
+      <p className="text-xs text-slate-500">Last seen: {formatLastSeen(lastSeenAt)}</p>
+    </div>
+  );
 }
 
 export default function AdminUsersPage() {
@@ -45,6 +64,7 @@ export default function AdminUsersPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, loadPageData)
       .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, loadPageData)
       .on("postgres_changes", { event: "*", schema: "public", table: "profile_change_requests" }, loadPageData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "employee_presence" }, loadPageData)
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -57,14 +77,29 @@ export default function AdminUsersPage() {
   }
 
   async function loadProfiles() {
-    const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+    const [profilesRes, presenceRes] = await Promise.all([
+      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+      supabase.from("employee_presence").select("user_id,last_seen_at"),
+    ]);
 
-    if (error) {
-      toast.error(error.message);
-    } else {
-      const withSignedAvatars = await attachSignedUrls(data ?? [], "documents", "avatar_url");
-      setProfiles(withSignedAvatars);
+    if (profilesRes.error) {
+      toast.error(profilesRes.error.message);
+      return;
     }
+
+    if (presenceRes.error) {
+      toast.error(presenceRes.error.message);
+      return;
+    }
+
+    const presenceMap = new Map((presenceRes.data ?? []).map((row) => [row.user_id, row.last_seen_at]));
+    const withSignedAvatars = await attachSignedUrls(profilesRes.data ?? [], "documents", "avatar_url");
+    setProfiles(
+      withSignedAvatars.map((profile) => ({
+        ...profile,
+        last_seen_at: presenceMap.get(profile.id) ?? null,
+      }))
+    );
   }
 
   async function loadProfileChangeRequests() {
@@ -405,6 +440,7 @@ export default function AdminUsersPage() {
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="pb-3">User</th>
+                <th className="pb-3">Presence</th>
                 <th className="pb-3">Assignment</th>
                 <th className="pb-3">Government IDs</th>
                 <th className="pb-3">Documents</th>
@@ -431,6 +467,13 @@ export default function AdminUsersPage() {
                         <p className="mt-1 text-xs text-slate-400">{profile.id}</p>
                       </div>
                     </div>
+                  </td>
+                  <td className="py-4">
+                    {profile.role === "employee" ? (
+                      <PresenceBadge lastSeenAt={profile.last_seen_at} />
+                    ) : (
+                      <p className="text-xs text-slate-400">Admin account</p>
+                    )}
                   </td>
                   <td className="py-4">
                     <p className="font-medium text-slate-700">{profile.position || "No position set"}</p>

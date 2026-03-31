@@ -26,7 +26,7 @@ export default function App() {
         <Route path="/reset-password/:portalType" element={<ResetPasswordPage />} />
         <Route
           path="/onboarding"
-          element={<OnboardingPage user={user} refreshProfile={refreshProfile} />}
+          element={<OnboardingPage user={user} profile={profile} refreshProfile={refreshProfile} />}
         />
         <Route
           element={

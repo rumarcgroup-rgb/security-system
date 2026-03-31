@@ -46,6 +46,13 @@ create table if not exists public.employee_documents (
   created_at timestamptz default now()
 );
 
+create table if not exists public.employee_presence (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  last_seen_at timestamptz not null default now(),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 create table if not exists public.profile_change_requests (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -144,6 +151,16 @@ begin
   if not exists (
     select 1
     from pg_constraint
+    where conname = 'employee_presence_user_id_profile_fkey'
+  ) then
+    alter table public.employee_presence
+      add constraint employee_presence_user_id_profile_fkey
+      foreign key (user_id) references public.profiles(id) on delete cascade;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
     where conname = 'profiles_signature_status_check'
   ) then
     alter table public.profiles
@@ -182,6 +199,7 @@ create index if not exists idx_dtr_submissions_selected_dtr_date on public.dtr_s
 create index if not exists idx_dtr_submissions_approved_at on public.dtr_submissions(approved_at desc);
 create index if not exists idx_employee_documents_user_id on public.employee_documents(user_id);
 create index if not exists idx_employee_documents_review_status on public.employee_documents(review_status);
+create index if not exists idx_employee_presence_last_seen_at on public.employee_presence(last_seen_at desc);
 create index if not exists idx_profile_change_requests_user_id on public.profile_change_requests(user_id);
 create index if not exists idx_profile_change_requests_status on public.profile_change_requests(status);
 create index if not exists idx_profile_change_requests_created_at on public.profile_change_requests(created_at desc);
@@ -189,6 +207,7 @@ create index if not exists idx_profile_change_requests_created_at on public.prof
 alter table public.profiles enable row level security;
 alter table public.dtr_submissions enable row level security;
 alter table public.employee_documents enable row level security;
+alter table public.employee_presence enable row level security;
 alter table public.profile_change_requests enable row level security;
 
 -- Avoid RLS recursion by checking admin role through a SECURITY DEFINER function.
@@ -239,6 +258,12 @@ with check (auth.uid() = user_id or public.is_admin(auth.uid()));
 drop policy if exists "users_can_manage_own_documents" on public.employee_documents;
 create policy "users_can_manage_own_documents"
 on public.employee_documents for all
+using (auth.uid() = user_id or public.is_admin(auth.uid()))
+with check (auth.uid() = user_id or public.is_admin(auth.uid()));
+
+drop policy if exists "users_can_manage_own_presence" on public.employee_presence;
+create policy "users_can_manage_own_presence"
+on public.employee_presence for all
 using (auth.uid() = user_id or public.is_admin(auth.uid()))
 with check (auth.uid() = user_id or public.is_admin(auth.uid()));
 

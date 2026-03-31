@@ -32,6 +32,7 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import { supabase } from "../../lib/supabase";
 import { attachSignedUrls } from "../../lib/storage";
 import { buildCutoffOptions } from "../../lib/dtr";
+import { EMPLOYEE_PRESENCE_HEARTBEAT_MS } from "../../lib/presence";
 import employeeCardBackground from "../../assets/employee-card-bg.jpg";
 
 const REQUIRED_DOCUMENTS = ["Valid ID", "NBI Clearance", "Medical Certificate", "Barangay Clearance", "Signature"];
@@ -131,6 +132,45 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
   });
   const [editProfileImageFile, setEditProfileImageFile] = useState(null);
   const [editProfileImagePreview, setEditProfileImagePreview] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function updatePresence() {
+      if (cancelled) return;
+      await supabase.from("employee_presence").upsert(
+        {
+          user_id: user.id,
+          last_seen_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
+    }
+
+    void updatePresence();
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void updatePresence();
+      }
+    }, EMPLOYEE_PRESENCE_HEARTBEAT_MS);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void updatePresence();
+      }
+    };
+
+    window.addEventListener("focus", updatePresence);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", updatePresence);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [user.id]);
 
   useEffect(() => {
     setProfileRow(profile);
@@ -577,6 +617,13 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
 
   async function handleLogout() {
     setLoggingOut(true);
+    await supabase.from("employee_presence").upsert(
+      {
+        user_id: user.id,
+        last_seen_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
     const { error } = await supabase.auth.signOut();
     setLoggingOut(false);
 

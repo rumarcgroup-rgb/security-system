@@ -51,10 +51,10 @@ function isRateLimitError(message = "") {
   return /rate limit|too many requests|email rate limit/i.test(message);
 }
 
-export default function OnboardingPage({ user, refreshProfile }) {
+export default function OnboardingPage({ user, profile, refreshProfile }) {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(user ? 2 : 1);
   const [loading, setLoading] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [account, setAccount] = useState({
@@ -90,6 +90,10 @@ export default function OnboardingPage({ user, refreshProfile }) {
   });
   const [pendingSignup, setPendingSignupState] = useState(() => getPendingSignup());
 
+  const visibleSteps = user ? steps.slice(1) : steps;
+  const visibleStepNumber = user ? step - 1 : step;
+  const totalSteps = visibleSteps.length;
+
   useEffect(() => {
     const storedPendingSignup = getPendingSignup();
     if (storedPendingSignup?.email) {
@@ -100,6 +104,17 @@ export default function OnboardingPage({ user, refreshProfile }) {
       setPendingSignupState(storedPendingSignup);
     }
   }, []);
+
+  useEffect(() => {
+    if (user && step === 1) {
+      setStep(2);
+    }
+  }, [step, user]);
+
+  useEffect(() => {
+    if (!user || !profile) return;
+    navigate(profile.role === "admin" ? "/admin" : "/", { replace: true });
+  }, [navigate, profile, user]);
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -254,13 +269,16 @@ export default function OnboardingPage({ user, refreshProfile }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-bold text-slate-800">Employee Onboarding</h1>
           <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">
-            Step {step} of 6
+            Step {visibleStepNumber} of {totalSteps}
           </span>
         </div>
         <div className="mt-3 h-2 rounded-full bg-slate-100">
-          <div className="h-2 rounded-full bg-brand-500 transition-all" style={{ width: `${(step / 6) * 100}%` }} />
+          <div
+            className="h-2 rounded-full bg-brand-500 transition-all"
+            style={{ width: `${(visibleStepNumber / totalSteps) * 100}%` }}
+          />
         </div>
-        <p className="mt-2 text-sm text-slate-500">{steps[step - 1]}</p>
+        <p className="mt-2 text-sm text-slate-500">{visibleSteps[visibleStepNumber - 1]}</p>
       </Card>
 
       <Card>
@@ -446,7 +464,7 @@ export default function OnboardingPage({ user, refreshProfile }) {
 
         {step > 1 ? (
           <div className="mt-5 flex justify-between">
-            <Button variant="secondary" onClick={() => setStep((prev) => Math.max(prev - 1, 1))}>
+            <Button variant="secondary" onClick={() => setStep((prev) => Math.max(prev - 1, user ? 2 : 1))}>
               Back
             </Button>
             {step < 6 ? <Button onClick={() => setStep((prev) => Math.min(prev + 1, 6))}>Next</Button> : null}

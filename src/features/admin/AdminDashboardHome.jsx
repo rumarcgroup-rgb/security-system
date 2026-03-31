@@ -4,12 +4,14 @@ import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { supabase } from "../../lib/supabase";
+import { isEmployeeOnline } from "../../lib/presence";
 
 const metricCards = [
   { key: "pendingDtr", label: "Pending DTR", icon: Clock3, tone: "text-amber-600", bg: "bg-amber-50" },
   { key: "pendingRequirements", label: "Pending Requirements", icon: FileText, tone: "text-rose-600", bg: "bg-rose-50" },
   { key: "approvedToday", label: "Approved Today", icon: CheckCircle2, tone: "text-emerald-600", bg: "bg-emerald-50" },
   { key: "activeEmployees", label: "Active Employees", icon: Users, tone: "text-brand-600", bg: "bg-brand-50" },
+  { key: "onlineEmployees", label: "Online Now", icon: Activity, tone: "text-emerald-700", bg: "bg-emerald-50" },
   { key: "totalEmployeeSubmissions", label: "Total Employee Submissions", icon: Activity, tone: "text-slate-800", bg: "bg-slate-100" },
 ];
 
@@ -43,17 +45,23 @@ export default function AdminDashboardHome() {
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, loadData)
       .subscribe();
 
+    const presenceChannel = supabase
+      .channel("admin-dashboard-presence")
+      .on("postgres_changes", { event: "*", schema: "public", table: "employee_presence" }, loadData)
+      .subscribe();
+
     return () => {
       supabase.removeChannel(dtrChannel);
       supabase.removeChannel(documentsChannel);
       supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(presenceChannel);
     };
   }, []);
 
   async function loadData() {
     setLoading(true);
 
-    const [recentDtrRes, allDtrRes, documentsRes, profilesRes] = await Promise.all([
+    const [recentDtrRes, allDtrRes, documentsRes, profilesRes, presenceRes] = await Promise.all([
       supabase
         .from("dtr_submissions")
         .select("id,status,created_at,cutoff,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location)")
@@ -70,6 +78,7 @@ export default function AdminDashboardHome() {
         .from("profiles")
         .select("id,role,full_name,location,employee_id,created_at,signature_url,signature_status")
         .order("created_at", { ascending: false }),
+      supabase.from("employee_presence").select("user_id,last_seen_at"),
     ]);
 
     if (!recentDtrRes.error) {
@@ -80,8 +89,14 @@ export default function AdminDashboardHome() {
       setAllDtrRows(allDtrRes.data ?? []);
     }
 
-    if (!profilesRes.error) {
-      setProfiles(profilesRes.data ?? []);
+    if (!profilesRes.error && !presenceRes.error) {
+      const presenceMap = new Map((presenceRes.data ?? []).map((row) => [row.user_id, row.last_seen_at]));
+      setProfiles(
+        (profilesRes.data ?? []).map((profile) => ({
+          ...profile,
+          last_seen_at: presenceMap.get(profile.id) ?? null,
+        }))
+      );
     }
 
     if (!documentsRes.error && !profilesRes.error) {
@@ -122,6 +137,7 @@ export default function AdminDashboardHome() {
   const metrics = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     const activeEmployees = profiles.filter((profile) => profile.role !== "admin").length;
+    const onlineEmployees = profiles.filter((profile) => profile.role !== "admin" && isEmployeeOnline(profile.last_seen_at)).length;
     const pendingDtr = allDtrRows.filter((row) => row.status === "Pending Review").length;
     const approvedToday = allDtrRows.filter(
       (row) => row.status === "Approved" && new Date(row.created_at).toISOString().slice(0, 10) === today
@@ -133,6 +149,7 @@ export default function AdminDashboardHome() {
       pendingRequirements,
       approvedToday,
       activeEmployees,
+      onlineEmployees,
       totalEmployeeSubmissions: allDtrRows.length + allRequirementRows.length,
     };
   }, [allDtrRows, allRequirementRows, profiles]);
