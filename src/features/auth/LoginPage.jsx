@@ -11,6 +11,16 @@ import employeeCardBackground from "../../assets/front-page.jpg";
 import janitorLoginHalfbody from "../../assets/janitor.jpg";
 
 const portalConfigs = {
+  "cgroup-access": {
+    title: "CGroup Access",
+    subtitle: "CGroup Access Portal",
+    loginTitle: "CGroup Access Login",
+    accentClass: "from-[#f4b400] to-[#d99100]",
+    buttonClass: "bg-[#f4b400] hover:bg-[#d89f13]",
+    badgeClass: "bg-[#fff4cc] text-[#153f91]",
+    icon: Shield,
+    description: "Access CGroup portal",
+  },
   "security-guard": {
     title: "Security Guard",
     subtitle: "Security Guard Portal",
@@ -129,18 +139,10 @@ export default function LoginPage() {
               backgroundPosition: "center",
             }}
           >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_center,rgba(255,255,255,0.18),transparent_35%)]" />
-            <div className="relative mx-auto flex w-fit items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-xs font-semibold tracking-[0.14em] text-white/90 ring-1 ring-white/20">
-              <Sparkles size={12} />
-              CGROUP CARES
-            </div>
+
 
             <div className="relative mt-4 text-center text-white">
-              <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-[28px] border border-white/30 bg-white/15 shadow-[0_16px_28px_rgba(7,18,53,0.28)] backdrop-blur-sm">
-                <div className="flex h-16 w-16 items-center justify-center rounded-[22px] bg-white text-[#123f91]">
-                  <Shield size={34} />
-                </div>
-              </div>
+
               <p className="mt-5 text-[15px] font-medium text-white/88">Welcome to</p>
               <h1 className="mt-1 text-[2rem] font-black tracking-[-0.03em]">CGROUP</h1>
               <div className="mx-auto mt-3 w-fit rounded-2xl bg-[#ffcc3f] px-5 py-2 text-lg font-black tracking-[0.05em] text-[#17386e] shadow-[0_12px_24px_rgba(255,204,63,0.28)]">
@@ -151,6 +153,7 @@ export default function LoginPage() {
 
             <div className="relative mt-5 space-y-3">
               {[
+                { key: "cgroup-access", colorClass: "text-[#153f91]", copy: "Access CGroup Portal" },
                 { key: "security-guard", colorClass: "text-[#143d86]", copy: "Access Guard Portal" },
                 { key: "janitor", colorClass: "text-[#0f7b4d]", copy: "Access Janitor Portal" },
               ].map((item) => {
@@ -166,11 +169,15 @@ export default function LoginPage() {
                     <div
                       className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full ${config.badgeClass} overflow-hidden`}
                     >
-                      <img
-                        src={config.image}
-                        alt={config.title}
-                        className="h-full w-full object-cover"
-                      />
+                      {image ? (
+                        <img
+                          src={config.image}
+                          alt={config.title}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <config.icon size={28} />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className={`text-[2rem] font-black leading-none tracking-[-0.03em] ${item.colorClass}`}>{config.title}</p>
@@ -200,6 +207,7 @@ export default function LoginPage() {
   const PortalIcon = portal.icon;
   const isSecurityPortal = portalType === "security-guard";
   const isJanitorPortal = portalType === "janitor";
+  const isCGroupPortal = portalType === "cgroup-access";
   const portalHeroBackground = isSecurityPortal
     ? null
     : isJanitorPortal
@@ -209,46 +217,71 @@ export default function LoginPage() {
     ? "none"
     : isJanitorPortal
       ? "linear-gradient(180deg, rgba(8,104,58,0.18) 0%, rgba(9,109,62,0.62) 58%, rgba(8,70,43,0.88) 100%)"
-      : "linear-gradient(180deg, rgba(8,56,143,0.1) 0%, rgba(8,56,143,0.68) 72%, rgba(16,41,92,0.95) 100%)";
+      : isCGroupPortal
+        ? "linear-gradient(180deg, rgba(244,180,0,0.12) 0%, rgba(21,63,145,0.72) 70%, rgba(16,41,92,0.95) 100%)"
+        : "linear-gradient(180deg, rgba(8,56,143,0.1) 0%, rgba(8,56,143,0.68) 72%, rgba(16,41,92,0.95) 100%)";
   const isCompactPortal = isJanitorPortal;
+  const portalContainerBackground = isSecurityPortal
+    ? "bg-[linear-gradient(180deg,#d9ebff_0%,#eff6ff_45%,#d5e7ff_100%)]"
+    : "bg-[linear-gradient(180deg,#e0efff_0%,#f4f8ff_26%,#dce8f7_100%)]";
+  const heroPanelBaseClass = isSecurityPortal
+    ? "bg-[linear-gradient(180deg,#0b4cac_0%,#0a3f94_38%,#f4f8ff_38.5%,#ffffff_100%)]"
+    : isJanitorPortal
+      ? "bg-[linear-gradient(180deg,#0f7b4d_0%,#0c6a3d_100%)]"
+      : "bg-[#143f92]";
 
   return (
-    <div className={`relative flex min-h-screen items-center justify-center overflow-hidden p-4 ${isSecurityPortal ? "bg-[linear-gradient(180deg,#d9ebff_0%,#eff6ff_45%,#d5e7ff_100%)]" : "bg-[linear-gradient(180deg,#e0efff_0%,#f4f8ff_26%,#dce8f7_100%)]"}`}>
+    <div className={`relative flex min-h-screen items-center justify-center overflow-hidden p-4 ${portalContainerBackground}`}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(12,74,110,0.18),transparent_32%)]" />
       <div className={`relative w-full overflow-hidden border border-white/70 bg-white shadow-[0_28px_80px_rgba(15,23,42,0.22)] ${isCompactPortal ? "max-w-[300px] rounded-[34px]" : "max-w-[430px] rounded-[34px]"}`}>
         <div
-          className={`text-white ${isSecurityPortal ? "relative px-5 pb-8 pt-4" : isJanitorPortal ? "relative overflow-hidden px-4 pb-3 pt-3" : "px-5 pb-5 pt-4"}`}
-          style={{
-            backgroundImage: portalHeroBackground ? `${portalHeroOverlay}, url(${portalHeroBackground})` : "none",
-            backgroundSize: portalHeroBackground ? "cover" : undefined,
-            backgroundPosition: isJanitorPortal ? "center 12%" : isSecurityPortal ? "center top" : "center",
-            background: isSecurityPortal
-              ? "linear-gradient(180deg, #0b4cac 0%, #0a3f94 38%, #f4f8ff 38.5%, #ffffff 100%)"
-              : isJanitorPortal
-                ? "linear-gradient(180deg, #0f7b4d 0%, #0c6a3d 100%)"
-                : undefined,
-          }}
+          className={`relative overflow-hidden text-white ${heroPanelBaseClass} ${isSecurityPortal ? "px-5 pb-8 pt-4" : isJanitorPortal ? "px-4 pb-3 pt-3" : "px-5 pb-5 pt-4"
+            }`}
         >
+          {portalHeroBackground ? (
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                backgroundImage: `${portalHeroOverlay}, url(${portalHeroBackground})`,
+                backgroundSize: "cover",
+                backgroundPosition: isJanitorPortal ? "center 12%" : "center",
+              }}
+            />
+          ) : null}
+
           <div className="flex items-center justify-between gap-3">
             <Link
               to="/login"
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 ${isSecurityPortal ? "bg-white/90 text-[#123c94] ring-white/70" : isJanitorPortal ? "bg-white/12 text-white ring-white/15" : "bg-white/10 ring-white/20"}`}
+              className={`relative inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 ${isSecurityPortal ? "bg-white/90 text-[#123c94] ring-white/70" : isJanitorPortal ? "bg-white/12 text-white ring-white/15" : "bg-white/10 ring-white/20"
+                }`}
             >
               <ArrowLeft size={18} />
             </Link>
-            <div className="text-center">
+            <div className="relative text-center">
               <div
-                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-bold tracking-[0.04em] ${isSecurityPortal ? "bg-white/90 text-[#123c94]" : isJanitorPortal ? "bg-transparent text-white" : "bg-white/10"}`}
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-bold tracking-[0.04em] ${isSecurityPortal
+                  ? "bg-white/90 text-[#123c94]"
+                  : isJanitorPortal
+                    ? "bg-transparent text-white"
+                    : isCGroupPortal
+                      ? "bg-[#fff4cc] text-[#153f91]"
+                      : "bg-white/10"
+                  }`}
               >
                 <Shield size={16} />
                 CGROUP
               </div>
-              <p className={`mt-1 text-xs font-medium ${isSecurityPortal ? "text-[#d6e4ff]" : isJanitorPortal ? "text-white/90" : "text-white/80"}`}>{portal.subtitle}</p>
+              <p
+                className={`mt-1 text-xs font-medium ${isSecurityPortal ? "text-[#d6e4ff]" : isJanitorPortal ? "text-white/90" : isCGroupPortal ? "text-white/90" : "text-white/80"
+                  }`}
+              >
+                {portal.subtitle}
+              </p>
             </div>
-            <div className="h-9 w-9" />
+            <div className="relative h-9 w-9" />
           </div>
 
-          <div className={`mt-4 ${isSecurityPortal ? "" : isJanitorPortal ? "" : "rounded-[24px] bg-white/12 p-4 backdrop-blur-sm"}`}>
+          <div className={`relative mt-4 ${isSecurityPortal ? "" : isJanitorPortal ? "" : "rounded-[24px] bg-white/12 p-4 backdrop-blur-sm"}`}>
             {isSecurityPortal ? (
               <div className="relative mx-auto mt-2 flex h-32 w-32 items-center justify-center rounded-full border border-white/30 bg-white/10 shadow-[0_18px_34px_rgba(9,20,54,0.22)] backdrop-blur-sm">
                 <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[#e8f0ff] text-[#0d4dc4] shadow-inner">
@@ -268,7 +301,7 @@ export default function LoginPage() {
             ) : (
               <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full border border-white/30 bg-white/10 shadow-[0_14px_26px_rgba(9,20,54,0.22)]">
                 <div className={`flex h-20 w-20 items-center justify-center rounded-full ${portal.badgeClass}`}>
-                  <PortalIcon size={38} />
+                  <PortalIcon size={isCGroupPortal ? 34 : 38} />
                 </div>
               </div>
             )}
