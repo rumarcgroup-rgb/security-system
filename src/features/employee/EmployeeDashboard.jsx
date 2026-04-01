@@ -34,6 +34,7 @@ import { attachSignedUrls } from "../../lib/storage";
 import { buildCutoffOptions } from "../../lib/dtr";
 import { EMPLOYEE_PRESENCE_HEARTBEAT_MS } from "../../lib/presence";
 import employeeCardBackground from "../../assets/employee-card-bg.jpg";
+import "./EmployeeDashboard.css";
 
 const REQUIRED_DOCUMENTS = ["Valid ID", "NBI Clearance", "Medical Certificate", "Barangay Clearance", "Signature"];
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -818,12 +819,12 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
   }, [profileChangeRequest?.status, summary.flaggedDocs]);
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-md bg-slate-100 pb-24">
-      <header className="sticky top-0 z-20 glass border-b border-slate-200 p-4">
-        <div className="flex items-center justify-between">
-          <div className="rounded-xl bg-brand-500 px-3 py-1.5 text-sm font-bold text-white">CGROUP</div>
+    <div className="employee-dashboard">
+      <header className="employee-dashboard__header glass">
+        <div className="employee-dashboard__header-inner">
+          <div className="employee-dashboard__brand">CGROUP</div>
           <button
-            className="relative rounded-full bg-white p-2 shadow"
+            className="employee-dashboard__icon-button"
             onClick={() => {
               setNotificationsOpen(true);
               setSeenNotificationIds((current) => Array.from(new Set([...current, ...notifications.map((item) => item.id)])));
@@ -831,7 +832,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
           >
             <Bell size={18} />
             {unreadNotificationCount > 0 ? (
-              <span className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full bg-rose-500 px-1 text-[10px] text-white">
+              <span className="employee-dashboard__badge">
                 {Math.min(unreadNotificationCount, 9)}
               </span>
             ) : null}
@@ -839,13 +840,13 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         </div>
       </header>
 
-      <main className="space-y-4 p-4">
-        <h2 className="text-lg font-semibold">My Profile</h2>
-        <Card className="border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xl font-bold text-brand-700">
+      <main className="employee-dashboard__content employee-dashboard__stack-lg">
+        <h2 className="employee-dashboard__section-title">My Profile</h2>
+        <Card className="employee-dashboard__profile-card">
+          <div className="employee-dashboard__profile-header">
+            <div className="employee-dashboard__profile-avatar">
               {person.avatar_preview_url ? (
-                <img src={person.avatar_preview_url} alt={person.full_name} className="h-full w-full object-cover" />
+                <img src={person.avatar_preview_url} alt={person.full_name} className="employee-dashboard__img-cover" />
               ) : (
                 person.full_name
                   .split(" ")
@@ -856,54 +857,54 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             </div>
 
             <div>
-              <h2 className="text-lg font-semibold text-slate-800">{person.full_name}</h2>
-              <p className="text-sm text-slate-500">{person.role}</p>
+              <h2 className="employee-dashboard__profile-name">{person.full_name}</h2>
+              <p className="employee-dashboard__profile-role">{person.role}</p>
             </div>
           </div>
 
-          <div className="my-4 h-px bg-slate-200" />
+          <div className="employee-dashboard__profile-divider" />
 
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600">
-            <span className="inline-flex items-center gap-1.5">
+          <div className="employee-dashboard__profile-meta">
+            <span className="employee-dashboard__profile-meta-item">
               <IdCard size={14} className="text-slate-500" />
-              <span className="font-medium text-slate-500">Employee ID:</span>
+              <span className="employee-dashboard__label-strong">Employee ID:</span>
               <span>{person.employee_id}</span>
             </span>
-            <span className="inline-flex items-center gap-1.5">
+            <span className="employee-dashboard__profile-meta-item">
               <MapPin size={14} className="text-slate-500" />
-              <span className="font-medium text-slate-500">Location:</span>
+              <span className="employee-dashboard__label-strong">Location:</span>
               <span>{person.location}</span>
             </span>
           </div>
         </Card>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="bg-slate-900 text-white">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Pending DTR</p>
-            <p className="mt-2 text-2xl font-bold">{summary.pendingDtrs}</p>
-            <p className="mt-1 text-xs text-slate-300">Waiting for payroll review</p>
+        <div className="employee-dashboard__stats-grid">
+          <Card className="employee-dashboard__stat-card--dark">
+            <p className="employee-dashboard__stat-label employee-dashboard__stat-label--dark">Pending DTR</p>
+            <p className="employee-dashboard__stat-value">{summary.pendingDtrs}</p>
+            <p className="employee-dashboard__stat-copy employee-dashboard__stat-copy--dark">Waiting for payroll review</p>
           </Card>
-          <Card className="bg-white">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Approved DTR</p>
-            <p className="mt-2 text-2xl font-bold text-slate-800">{summary.approvedDtrs}</p>
-            <p className="mt-1 text-xs text-slate-500">Recent approved cutoffs</p>
+          <Card className="employee-dashboard__stat-card--light">
+            <p className="employee-dashboard__stat-label employee-dashboard__stat-label--light">Approved DTR</p>
+            <p className="employee-dashboard__stat-value employee-dashboard__stat-value--light">{summary.approvedDtrs}</p>
+            <p className="employee-dashboard__stat-copy employee-dashboard__stat-copy--light">Recent approved cutoffs</p>
           </Card>
-          <Card className="bg-white">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Verified Files</p>
-            <p className="mt-2 text-2xl font-bold text-emerald-600">{summary.verifiedDocs}</p>
-            <p className="mt-1 text-xs text-slate-500">Docs cleared by admin</p>
+          <Card className="employee-dashboard__stat-card--light">
+            <p className="employee-dashboard__stat-label employee-dashboard__stat-label--light">Verified Files</p>
+            <p className="employee-dashboard__stat-value employee-dashboard__stat-value--success">{summary.verifiedDocs}</p>
+            <p className="employee-dashboard__stat-copy employee-dashboard__stat-copy--light">Docs cleared by admin</p>
           </Card>
-          <Card className="bg-rose-50">
-            <p className="text-xs uppercase tracking-[0.18em] text-rose-500">Needs Action</p>
-            <p className="mt-2 text-2xl font-bold text-rose-600">{summary.flaggedDocs}</p>
-            <p className="mt-1 text-xs text-rose-600">Missing or for reupload</p>
+          <Card className="employee-dashboard__stat-card--alert">
+            <p className="employee-dashboard__stat-label employee-dashboard__stat-label--alert">Needs Action</p>
+            <p className="employee-dashboard__stat-value employee-dashboard__stat-value--alert">{summary.flaggedDocs}</p>
+            <p className="employee-dashboard__stat-copy employee-dashboard__stat-copy--alert">Missing or for reupload</p>
           </Card>
         </div>
 
         <Card>
-          <h3 className="mb-3 text-base font-semibold">Submit DTR</h3>
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <h3 className="employee-dashboard__subsection-title employee-dashboard__subsection-title--with-margin">Submit DTR</h3>
+          <div className="employee-dashboard__stack-md">
+            <div className="employee-dashboard__info-banner">
               Submit only your final and correct DTR image for the selected cutoff. Double-check the file before sending because admin review is based on the uploaded copy.
             </div>
             <Select value={cutoff} onChange={(e) => setCutoff(e.target.value)}>
@@ -911,70 +912,70 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                 <option key={item}>{item}</option>
               ))}
             </Select>
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Note for Admin</span>
+            <label className="employee-dashboard__textarea-label">
+              <span className="employee-dashboard__textarea-label-text">Note for Admin</span>
               <textarea
-                className="min-h-[96px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-brand-500"
+                className="employee-dashboard__textarea"
                 placeholder="Optional note about this DTR submission"
                 value={employeeNote}
                 onChange={(e) => setEmployeeNote(e.target.value)}
               />
             </label>
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center transition hover:border-brand-400">
-              <div className="mb-2 flex gap-2 text-slate-500">
+            <label className="employee-dashboard__upload-card">
+              <div className="employee-dashboard__upload-icons">
                 <Camera size={18} />
                 <ImageUp size={18} />
               </div>
-              <p className="text-sm text-slate-600">{file ? file.name : "Tap to upload DTR image"}</p>
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0])} />
+              <p className="employee-dashboard__copy-sm">{file ? file.name : "Tap to upload DTR image"}</p>
+              <input type="file" accept="image/*" className="employee-dashboard__hidden-input" onChange={(e) => setFile(e.target.files?.[0])} />
             </label>
-            <Button className="w-full" loading={submitting} onClick={submitDtr}>
+            <Button className="employee-dashboard__btn-full" loading={submitting} onClick={submitDtr}>
               Submit DTR
             </Button>
           </div>
         </Card>
 
         <div>
-          <h3 className="mb-2 text-base font-semibold">Recent Submissions</h3>
-          <div className="space-y-2">
+          <h3 className="employee-dashboard__subsection-title employee-dashboard__subsection-title--tight">Recent Submissions</h3>
+          <div className="employee-dashboard__recent-list">
             {submissions.map((row) => (
               <motion.div
                 key={row.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-xl bg-white p-3 shadow-card"
+                className="employee-dashboard__recent-item"
               >
-                <div className="flex items-center justify-between">
+                <div className="employee-dashboard__recent-item-header">
                   <div>
-                    <p className="text-xs text-slate-500">{new Date(row.created_at).toLocaleString()}</p>
-                    <p className="text-sm font-medium text-slate-700">{row.cutoff}</p>
-                    {row.employee_note ? <p className="mt-1 text-xs text-slate-500">Note: {row.employee_note}</p> : null}
-                    {row.admin_remarks ? <p className="mt-1 text-xs text-brand-700">Admin remarks: {row.admin_remarks}</p> : null}
+                    <p className="employee-dashboard__copy-xs">{new Date(row.created_at).toLocaleString()}</p>
+                    <p className="employee-dashboard__text-strong">{row.cutoff}</p>
+                    {row.employee_note ? <p className="employee-dashboard__copy-xs-spaced">Note: {row.employee_note}</p> : null}
+                    {row.admin_remarks ? <p className="employee-dashboard__copy-xs-spaced-brand">Admin remarks: {row.admin_remarks}</p> : null}
                     {row.approved_at ? (
-                      <p className="text-xs text-emerald-600">Approved: {new Date(row.approved_at).toLocaleString()}</p>
+                      <p className="employee-dashboard__copy-xs-success">Approved: {new Date(row.approved_at).toLocaleString()}</p>
                     ) : null}
                   </div>
                   <StatusBadge status={row.status} />
                 </div>
               </motion.div>
             ))}
-            {submissions.length === 0 ? <p className="text-sm text-slate-500">No submissions yet.</p> : null}
+            {submissions.length === 0 ? <p className="employee-dashboard__copy-sm">No submissions yet.</p> : null}
           </div>
         </div>
 
         <Card>
-          <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="employee-dashboard__section-head">
             <div>
-              <h3 className="text-base font-semibold">Document Status</h3>
-              <p className="text-sm text-slate-500">Track uploaded requirements and signature review.</p>
+              <h3 className="employee-dashboard__subsection-title">Document Status</h3>
+              <p className="employee-dashboard__copy-sm">Track uploaded requirements and signature review.</p>
             </div>
-            <div className="rounded-xl bg-slate-100 p-2 text-slate-600">
+            <div className="employee-dashboard__section-icon">
               <ShieldCheck size={18} />
             </div>
           </div>
 
-          <div className="space-y-2">
-            {documentsLoading ? <p className="text-sm text-slate-500">Loading documents...</p> : null}
+          <div className="employee-dashboard__stack">
+            {documentsLoading ? <p className="employee-dashboard__copy-sm">Loading documents...</p> : null}
             {!documentsLoading
               ? documents.map((document) => {
                 const Icon = getDocumentIcon(document.file_url);
@@ -982,19 +983,19 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                 return (
                   <button
                     key={document.id}
-                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-left transition hover:border-brand-300 hover:bg-white"
+                    className="employee-dashboard__doc-row"
                     onClick={() => {
                       setReplacementFile(null);
                       setActiveDocument(document);
                     }}
                   >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="rounded-xl bg-white p-2 text-slate-600 shadow-sm">
+                    <div className="employee-dashboard__doc-row-main">
+                      <div className="employee-dashboard__doc-row-icon">
                         <Icon size={18} />
                       </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-slate-800">{document.document_type}</p>
-                        <p className="truncate text-xs text-slate-500">
+                      <div className="employee-dashboard__min-w-0">
+                        <p className="employee-dashboard__truncate employee-dashboard__text-strong-dark">{document.document_type}</p>
+                        <p className="employee-dashboard__truncate employee-dashboard__copy-xs">
                           {document.created_at
                             ? new Date(document.created_at).toLocaleString()
                             : document.is_missing
@@ -1009,17 +1010,17 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
               })
               : null}
             {!documentsLoading && documents.length === 0 ? (
-              <p className="text-sm text-slate-500">No uploaded documents found yet.</p>
+              <p className="employee-dashboard__copy-sm">No uploaded documents found yet.</p>
             ) : null}
           </div>
         </Card>
       </main>
 
-      <nav className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-md -translate-x-1/2 items-center justify-around border-t border-slate-200 bg-white px-2 py-2">
+      <nav className="employee-dashboard__bottom-nav">
         <Nav icon={LayoutDashboard} label="Dashboard" />
         <Nav icon={ListChecks} label="Tasks" onClick={() => setTasksOpen(true)} />
         <button
-          className="-mt-8 rounded-full bg-brand-500 p-4 text-white shadow-lg shadow-brand-500/30"
+          className="employee-dashboard__nav-center"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         >
           <UploadCloud size={20} />
@@ -1038,14 +1039,14 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         title={activeDocument?.document_type || "Document Preview"}
       >
         {activeDocument ? (
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
+          <div className="employee-dashboard__stack-lg">
+            <div className="employee-dashboard__preview-head">
               <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-slate-800">{activeDocument.document_type}</p>
+                <div className="employee-dashboard__row-between employee-dashboard__row-gap-sm">
+                  <p className="employee-dashboard__text-strong-dark">{activeDocument.document_type}</p>
                   <StatusBadge status={activeDocument.review_status} />
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="employee-dashboard__preview-meta">
                   {activeDocument.created_at
                     ? new Date(activeDocument.created_at).toLocaleString()
                     : "No upload record available yet."}
@@ -1056,7 +1057,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                   href={activeDocument.preview_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className="employee-dashboard__preview-link"
                 >
                   <ExternalLink size={16} />
                   Open File
@@ -1069,17 +1070,17 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                 <iframe
                   title={activeDocument.document_type}
                   src={activeDocument.preview_url}
-                  className="h-[60vh] w-full rounded-2xl border border-slate-200"
+                  className="employee-dashboard__preview-frame"
                 />
               ) : (
                 <img
                   src={activeDocument.preview_url}
                   alt={activeDocument.document_type}
-                  className="max-h-[60vh] w-full rounded-2xl border border-slate-200 object-contain"
+                  className="employee-dashboard__preview-image"
                 />
               )
             ) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+              <div className="employee-dashboard__preview-empty">
                 {activeDocument.is_missing
                   ? "This requirement has not been uploaded yet."
                   : "Preview is currently unavailable for this file."}
@@ -1087,15 +1088,15 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             )}
 
             {activeDocument.review_status === "Needs Reupload" ? (
-              <div className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-700">
+              <div className="employee-dashboard__warning-panel">
                 This file was flagged for reupload. Upload a replacement below to send it back for review.
               </div>
             ) : null}
 
             {canEditDocument(activeDocument) ? (
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="employee-dashboard__editor-panel">
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">
+                  <p className="employee-dashboard__text-strong-dark">
                     {activeDocument.document_type === "Signature"
                       ? activeDocument.preview_url
                         ? "Update signature"
@@ -1106,7 +1107,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                         ? "Upload missing requirement"
                         : "Upload replacement"}
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="employee-dashboard__copy-xs">
                     {activeDocument.document_type === "Signature"
                       ? "Draw your signature below or upload a PNG, JPG, or WEBP file."
                       : "Accepted files: PNG, JPG, WEBP, or PDF."}
@@ -1114,9 +1115,9 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                 </div>
 
                 {activeDocument.document_type === "Signature" ? (
-                  <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-slate-700">Draw Signature</p>
+                  <div className="employee-dashboard__signature-panel">
+                    <div className="employee-dashboard__signature-head">
+                      <p className="employee-dashboard__text-strong-md">Draw Signature</p>
                       <button
                         type="button"
                         className="text-xs font-medium text-rose-600 hover:underline"
@@ -1138,29 +1139,29 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
                       onTouchMove={drawSignatureStroke}
                       onTouchEnd={endSignatureStroke}
                     />
-                    <p className="text-xs text-slate-500">
+                    <p className="employee-dashboard__copy-xs">
                       Sign using your mouse, touchpad, or phone screen. You can still upload an image file below if you prefer.
                     </p>
                   </div>
                 ) : null}
 
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white px-4 py-6 text-center transition hover:border-brand-400">
-                  <div className="mb-2 flex gap-2 text-slate-500">
+                <label className="employee-dashboard__upload-card employee-dashboard__upload-card--compact">
+                  <div className="employee-dashboard__upload-icons">
                     <Camera size={18} />
                     <ImageUp size={18} />
                   </div>
-                  <p className="text-sm text-slate-600">
+                  <p className="employee-dashboard__copy-sm">
                     {replacementFile ? replacementFile.name : `Choose ${activeDocument.document_type} file`}
                   </p>
                   <input
                     type="file"
                     accept={activeDocument.document_type === "Signature" ? "image/png,image/jpeg,image/webp" : "image/*,.pdf"}
-                    className="hidden"
+                    className="employee-dashboard__hidden-input"
                     onChange={(e) => setReplacementFile(e.target.files?.[0] ?? null)}
                   />
                 </label>
 
-                <Button className="w-full" loading={uploadingRequirement} onClick={() => uploadRequirement(activeDocument)}>
+                <Button className="employee-dashboard__btn-full" loading={uploadingRequirement} onClick={() => uploadRequirement(activeDocument)}>
                   {activeDocument.document_type === "Signature" && !replacementFile && hasSignatureDrawing
                     ? activeDocument.preview_url
                       ? "Update With Drawn Signature"
@@ -1182,12 +1183,12 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
       </Modal>
 
       <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="More Actions">
-        <div className="space-y-4">
-          <div className="flex justify-end">
+        <div className="employee-dashboard__stack-lg">
+          <div className="employee-dashboard__actions-end">
             <button
               type="button"
               aria-label="Close more actions"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+              className="employee-dashboard__modal-close"
               onClick={() => setMoreOpen(false)}
             >
               <X size={18} />
@@ -1195,29 +1196,27 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
           </div>
 
           <div
-            className="relative overflow-hidden rounded-[30px] p-6 text-white shadow-[0_20px_45px_rgba(24,59,120,0.28)] ring-1 ring-white/10"
+            className="employee-dashboard__identity-card"
             style={{
-              backgroundImage: `linear-gradient(135deg, rgba(18,49,102,0.88) 0%, rgba(38,86,166,0.72) 55%, rgba(22,57,118,0.9) 100%), url(${employeeCardBackground})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
+              "--employee-card-image": `url(${employeeCardBackground})`,
             }}
           >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.08),transparent_22%)]" />
-            <div className="absolute -left-10 bottom-2 h-24 w-24 rounded-full bg-white/6 blur-[1px]" />
-            <div className="absolute -right-7 -top-10 h-28 w-28 rounded-full bg-white/10" />
-            <div className="absolute inset-x-0 top-0 h-px bg-white/30" />
+            <div className="employee-dashboard__identity-overlay" />
+            <div className="employee-dashboard__identity-bubble-left" />
+            <div className="employee-dashboard__identity-bubble-right" />
+            <div className="employee-dashboard__identity-topline" />
 
-            <div className="relative flex items-start justify-between gap-4">
+            <div className="employee-dashboard__identity-content employee-dashboard__identity-header">
               <div>
-                <p className="text-[2rem] font-bold leading-tight tracking-[-0.02em]">{person.full_name}</p>
-                <p className="mt-1.5 text-sm font-semibold uppercase tracking-[0.22em] text-white/78">
+                <p className="employee-dashboard__identity-name">{person.full_name}</p>
+                <p className="employee-dashboard__identity-role">
                   {String(person.role || "Employee").toUpperCase()}
                 </p>
               </div>
 
-              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-2 border-white/80 bg-white text-base font-semibold text-[#234b93] shadow-[0_10px_25px_rgba(15,23,42,0.18)]">
+              <div className="employee-dashboard__identity-avatar">
                 {person.avatar_preview_url ? (
-                  <img src={person.avatar_preview_url} alt={person.full_name} className="h-full w-full object-cover" />
+                  <img src={person.avatar_preview_url} alt={person.full_name} className="employee-dashboard__img-cover" />
                 ) : (
                   person.full_name
                     .split(" ")
@@ -1228,47 +1227,47 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
               </div>
             </div>
 
-            <div className="relative mt-7 grid grid-cols-2 gap-x-7 gap-y-5">
+            <div className="employee-dashboard__identity-content employee-dashboard__identity-grid">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">Employee ID</p>
-                <p className="mt-1.5 text-[2rem] font-bold leading-none">{person.employee_id || "N/A"}</p>
+                <p className="employee-dashboard__identity-label">Employee ID</p>
+                <p className="employee-dashboard__identity-value">{person.employee_id || "N/A"}</p>
               </div>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">TIN Number</p>
-                <p className="mt-1.5 text-[2rem] font-bold leading-none">{profileRow?.tin || "N/A"}</p>
+                <p className="employee-dashboard__identity-label">TIN Number</p>
+                <p className="employee-dashboard__identity-value">{profileRow?.tin || "N/A"}</p>
               </div>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">SSS Number</p>
-                <p className="mt-1.5 text-[2rem] font-bold leading-none">{profileRow?.sss || "N/A"}</p>
+                <p className="employee-dashboard__identity-label">SSS Number</p>
+                <p className="employee-dashboard__identity-value">{profileRow?.sss || "N/A"}</p>
               </div>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">PhilHealth</p>
-                <p className="mt-1.5 text-[2rem] font-bold leading-none">{profileRow?.philhealth || "N/A"}</p>
+                <p className="employee-dashboard__identity-label">PhilHealth</p>
+                <p className="employee-dashboard__identity-value">{profileRow?.philhealth || "N/A"}</p>
               </div>
             </div>
 
-            <div className="relative mt-6 flex items-center justify-between border-t border-white/15 pt-4">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/82">Valid Entry</p>
-              <div className="rounded-full border border-white/15 bg-white/10 p-2">
+            <div className="employee-dashboard__identity-content employee-dashboard__identity-footer">
+              <p className="employee-dashboard__identity-footer-copy">Valid Entry</p>
+              <div className="employee-dashboard__identity-footer-icon">
                 <ShieldCheck size={16} className="text-white/90" />
               </div>
             </div>
           </div>
 
-          <div className="rounded-[26px] border border-slate-200/90 bg-white p-5 shadow-[0_14px_30px_rgba(15,23,42,0.06)]">
-            <div className="flex items-start justify-between gap-3">
+          <div className="employee-dashboard__status-card">
+            <div className="employee-dashboard__section-head">
               <div>
-                <p className="text-base font-semibold text-slate-800">Profile Edit Request</p>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="employee-dashboard__subsection-title">Profile Edit Request</p>
+                <p className="employee-dashboard__copy-sm">
                   Name and profile picture changes must be approved by admin before they go live.
                 </p>
               </div>
               {profileRequestLoading ? null : profileChangeRequest ? <StatusBadge status={profileChangeRequest.status} /> : null}
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="employee-dashboard__actions-wrap" style={{ marginTop: "0.75rem" }}>
               <Button
                 variant="secondary"
-                className="justify-start rounded-2xl border-slate-200 bg-slate-50 px-4 py-3 text-slate-700 shadow-sm"
+                className="employee-dashboard__button-secondary"
                 onClick={openEditProfileModal}
               >
                 <PencilLine size={16} />
@@ -1276,21 +1275,21 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
               </Button>
             </div>
             {profileRequestLoading ? (
-              <p className="mt-3 text-sm text-slate-500">Loading request status...</p>
+              <p className="employee-dashboard__copy-sm">Loading request status...</p>
             ) : profileChangeRequest ? (
-              <div className="mt-4 rounded-[20px] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] p-4 text-sm text-slate-600 ring-1 ring-slate-100">
-                <p className="font-semibold text-slate-700">{getStatusCopy(profileChangeRequest.status)}</p>
+              <div className="employee-dashboard__request-summary">
+                <p className="employee-dashboard__text-strong-dark">{getStatusCopy(profileChangeRequest.status)}</p>
                 <p className="mt-2">Requested name: {profileChangeRequest.requested_full_name || person.full_name}</p>
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="employee-dashboard__copy-xs-spaced">
                   Birthday: {profileChangeRequest.requested_birthday || profileRow?.birthday || "Not set"} | Gender:{" "}
                   {profileChangeRequest.requested_gender || profileRow?.gender || "Not set"}
                 </p>
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="employee-dashboard__copy-xs-spaced">
                   Submitted {new Date(profileChangeRequest.created_at).toLocaleString()}
                 </p>
               </div>
             ) : (
-              <div className="mt-4 rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+              <div className="employee-dashboard__request-empty">
                 No profile edit request submitted yet.
               </div>
             )}
@@ -1299,7 +1298,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
           <div className="grid gap-2">
             <Button
               variant="secondary"
-              className="w-full justify-center rounded-2xl border-slate-200 bg-white py-3 text-slate-700 shadow-sm"
+              className="employee-dashboard__button-full-secondary"
               loading={refreshing}
               onClick={refreshDashboard}
             >
@@ -1308,7 +1307,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             </Button>
             <Button
               variant="danger"
-              className="w-full justify-center rounded-2xl border-0 py-3 shadow-[0_16px_30px_rgba(244,63,94,0.24)]"
+              className="employee-dashboard__button-full-danger"
               loading={loggingOut}
               onClick={handleLogout}
             >
@@ -1317,7 +1316,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             </Button>
           </div>
 
-          <div className="rounded-[22px] border border-slate-200 bg-white/90 p-4 text-sm text-slate-600 shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
+          <div className="employee-dashboard__support-card">
             You currently have {summary.flaggedDocs} file{summary.flaggedDocs === 1 ? "" : "s"} that need attention and{" "}
             {summary.pendingDtrs} DTR submission{summary.pendingDtrs === 1 ? "" : "s"} still pending review.
           </div>
@@ -1325,19 +1324,19 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
       </Modal>
 
       <Modal open={tasksOpen} onClose={() => setTasksOpen(false)} title="My Tasks">
-        <div className="space-y-3">
+        <div className="employee-dashboard__stack">
           {tasks.length === 0 ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+            <div className="employee-dashboard__notice-card">
               You have no urgent employee tasks right now.
             </div>
           ) : null}
 
           {tasks.map((task) => (
-            <div key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-semibold text-slate-800">{task.title}</p>
-              <p className="mt-1 text-sm text-slate-600">{task.description}</p>
-              <div className="mt-3">
-                <Button className="w-full" variant={task.variant} onClick={task.action}>
+            <div key={task.id} className="employee-dashboard__list-card">
+              <p className="employee-dashboard__text-strong-dark">{task.title}</p>
+              <p className="employee-dashboard__list-card-copy">{task.description}</p>
+              <div className="employee-dashboard__btn-top">
+                <Button className="employee-dashboard__btn-full" variant={task.variant} onClick={task.action}>
                   {task.actionLabel}
                 </Button>
               </div>
@@ -1347,50 +1346,50 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
       </Modal>
 
       <Modal open={notificationsOpen} onClose={() => setNotificationsOpen(false)} title="Notifications">
-        <div className="space-y-3">
-          {notifications.length === 0 ? <p className="text-sm text-slate-500">No notifications yet.</p> : null}
+        <div className="employee-dashboard__stack">
+          {notifications.length === 0 ? <p className="employee-dashboard__copy-sm">No notifications yet.</p> : null}
 
           {notifications.map((notification) => (
-            <div key={notification.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-semibold text-slate-800">{notification.title}</p>
-              <p className="mt-1 text-sm text-slate-600">{notification.description}</p>
-              <p className="mt-2 text-xs text-slate-400">{formatDateTime(notification.createdAt)}</p>
+            <div key={notification.id} className="employee-dashboard__list-card">
+              <p className="employee-dashboard__text-strong-dark">{notification.title}</p>
+              <p className="employee-dashboard__list-card-copy">{notification.description}</p>
+              <p className="employee-dashboard__copy-xs-muted">{formatDateTime(notification.createdAt)}</p>
             </div>
           ))}
         </div>
       </Modal>
 
       <Modal open={messagesOpen} onClose={() => setMessagesOpen(false)} title="Messages">
-        <div className="space-y-3">
+        <div className="employee-dashboard__stack">
           {messages.map((message) => (
-            <div key={message.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-semibold text-slate-800">{message.title}</p>
-              <p className="mt-1 text-sm text-slate-600">{message.body}</p>
+            <div key={message.id} className="employee-dashboard__list-card">
+              <p className="employee-dashboard__text-strong-dark">{message.title}</p>
+              <p className="employee-dashboard__list-card-copy">{message.body}</p>
             </div>
           ))}
 
-          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="employee-dashboard__helper-panel">
             Need follow-up? Contact your assigned supervisor or the admin team for document, profile, or DTR concerns.
           </div>
         </div>
       </Modal>
 
       <Modal open={editProfileOpen} onClose={() => setEditProfileOpen(false)} title="Request Profile Update">
-        <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-500">
+        <div className="employee-dashboard__stack-lg">
+          <div className="employee-dashboard__profile-flow">
+            <div className="employee-dashboard__profile-flow-avatar">
               {activeProfileRequestAvatar ? (
                 <img
                   src={activeProfileRequestAvatar}
                   alt={editProfileForm.full_name || person.full_name}
-                  className="h-full w-full object-cover"
+                  className="employee-dashboard__img-cover"
                 />
               ) : (
                 <UserRound size={24} />
               )}
             </div>
-            <div className="text-sm text-slate-600">
-              <p className="font-medium text-slate-800">Current profile approval flow</p>
+            <div className="employee-dashboard__copy-sm">
+              <p className="employee-dashboard__text-strong-md">Current profile approval flow</p>
               <p>Submit your new name and profile picture here. Admin must approve before your live profile updates.</p>
             </div>
           </div>
@@ -1401,7 +1400,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             onChange={(e) => setEditProfileForm((prev) => ({ ...prev, full_name: e.target.value }))}
           />
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="employee-dashboard__grid-two">
             <Input
               label="Birthday"
               type="date"
@@ -1454,33 +1453,33 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             />
           </div>
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Profile Picture</span>
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center transition hover:border-brand-400">
-              <div className="mb-2 flex gap-2 text-slate-500">
+          <label className="employee-dashboard__textarea-label">
+            <span className="employee-dashboard__textarea-label-text">Profile Picture</span>
+            <label className="employee-dashboard__upload-card">
+              <div className="employee-dashboard__upload-icons">
                 <Camera size={18} />
                 <ImageUp size={18} />
               </div>
-              <p className="text-sm text-slate-600">
+              <p className="employee-dashboard__copy-sm">
                 {editProfileImageFile ? editProfileImageFile.name : "Choose a new profile picture"}
               </p>
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                className="hidden"
+                className="employee-dashboard__hidden-input"
                 onChange={(e) => setEditProfileImageFile(e.target.files?.[0] ?? null)}
               />
             </label>
-            <p className="mt-2 text-xs text-slate-500">Accepted files: PNG, JPG, or WEBP.</p>
+            <p className="employee-dashboard__copy-xs-spaced">Accepted files: PNG, JPG, or WEBP.</p>
           </label>
 
-          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="employee-dashboard__helper-panel">
             {profileChangeRequest?.status === "Pending Review"
               ? "A pending request already exists. Submitting again will update the pending request."
               : "Your current profile will stay the same until an admin approves this request."}
           </div>
 
-          <Button className="w-full" loading={submittingProfileRequest} onClick={submitProfileChangeRequest}>
+          <Button className="employee-dashboard__btn-full" loading={submittingProfileRequest} onClick={submitProfileChangeRequest}>
             {profileChangeRequest?.status === "Pending Review" ? "Update Pending Request" : "Submit For Approval"}
           </Button>
         </div>
@@ -1492,7 +1491,7 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
 function Nav({ icon: Icon, label, onClick }) {
   return (
     <button
-      className="flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-xs text-slate-500 transition hover:text-brand-600"
+      className="employee-dashboard__nav-button"
       onClick={onClick}
     >
       <Icon size={17} />
