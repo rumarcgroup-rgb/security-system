@@ -3,16 +3,18 @@ import { Activity, CheckCircle2, Clock3, FileText, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import StatusBadge from "../../components/ui/StatusBadge";
+import { sortAreas } from "../../lib/areas";
 import { supabase } from "../../lib/supabase";
 import { isEmployeeOnline } from "../../lib/presence";
+import "./AdminDashboardHome.css";
 
 const metricCards = [
-  { key: "pendingDtr", label: "Pending DTR", icon: Clock3, tone: "text-amber-600", bg: "bg-amber-50" },
-  { key: "pendingRequirements", label: "Pending Requirements", icon: FileText, tone: "text-rose-600", bg: "bg-rose-50" },
-  { key: "approvedToday", label: "Approved Today", icon: CheckCircle2, tone: "text-emerald-600", bg: "bg-emerald-50" },
-  { key: "activeEmployees", label: "Active Employees", icon: Users, tone: "text-brand-600", bg: "bg-brand-50" },
-  { key: "onlineEmployees", label: "Online Now", icon: Activity, tone: "text-emerald-700", bg: "bg-emerald-50" },
-  { key: "totalEmployeeSubmissions", label: "Total Employee Submissions", icon: Activity, tone: "text-slate-800", bg: "bg-slate-100" },
+  { key: "pendingDtr", label: "Pending DTR", icon: Clock3, tone: "amber" },
+  { key: "pendingRequirements", label: "Pending Requirements", icon: FileText, tone: "rose" },
+  { key: "approvedToday", label: "Approved Today", icon: CheckCircle2, tone: "emerald" },
+  { key: "activeEmployees", label: "Active Employees", icon: Users, tone: "brand" },
+  { key: "onlineEmployees", label: "Online Now", icon: Activity, tone: "emerald-dark" },
+  { key: "totalEmployeeSubmissions", label: "Total Employee Submissions", icon: Activity, tone: "slate" },
 ];
 
 function getRequirementTypeLabel(row) {
@@ -162,116 +164,111 @@ export default function AdminDashboardHome() {
       return acc;
     }, {});
 
-    return Object.entries(grouped)
-      .map(([location, count]) => ({ location, count }))
-      .sort((a, b) => b.count - a.count)
+    return sortAreas(Object.keys(grouped))
+      .map((location) => ({ location, count: grouped[location] }))
       .slice(0, 5);
   }, [profiles]);
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading dashboard metrics...</p>;
+    return <p className="admin-loading-copy">Loading dashboard metrics...</p>;
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        {metricCards.map(({ key, label, icon: Icon, tone, bg }) => (
+    <div className="admin-page admin-dashboard-home">
+      <div className="admin-metrics-grid admin-metrics-grid--dashboard">
+        {metricCards.map(({ key, label, icon: Icon, tone }) => (
           <Card key={key}>
-            <div className="flex items-start justify-between gap-3">
+            <div className="admin-metric-card">
               <div>
-                <p className="text-sm text-slate-500">{label}</p>
-                <p className={`mt-1 text-3xl font-bold ${tone}`}>{metrics[key]}</p>
+                <p className="admin-metric-label">{label}</p>
+                <p className={`admin-metric-value admin-metric-value--lg admin-dashboard-home__metric-value--${tone}`}>
+                  {metrics[key]}
+                </p>
               </div>
-              <div className={`rounded-2xl p-3 ${bg}`}>
-                <Icon className={tone} size={20} />
+              <div className={`admin-dashboard-home__metric-icon-box admin-dashboard-home__metric-icon-box--${tone}`}>
+                <Icon className={`admin-dashboard-home__metric-icon--${tone}`} size={20} />
               </div>
             </div>
           </Card>
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="admin-sections-grid admin-sections-grid--analytics">
         <Card>
-          <div className="mb-4 flex items-center justify-between">
+          <div className="admin-section-head">
             <div>
-              <h2 className="text-lg font-semibold text-slate-800">Recent DTR Activity</h2>
-              <p className="text-xs text-slate-500">Last {recentDtrRows.length} submissions</p>
+              <h2 className="admin-section-title admin-dashboard-home__section-title">Recent DTR Activity</h2>
+              <p className="admin-section-copy">Last {recentDtrRows.length} submissions</p>
             </div>
-            <Link className="text-sm font-medium text-brand-600 hover:underline" to="/admin/dtr-submissions">
+            <Link className="admin-link" to="/admin/dtr-submissions">
               Review Queue
             </Link>
           </div>
-          <div className="space-y-3">
+          <div className="admin-dashboard-home__activity-list">
             {recentDtrRows.map((row) => (
-              <div
-                key={row.id}
-                className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between"
-              >
+              <div key={row.id} className="admin-list-card admin-dashboard-home__activity-item">
                 <div>
-                  <p className="font-semibold text-slate-800">{row.profiles?.full_name || "Unknown Employee"}</p>
-                  <p className="text-sm text-slate-500">
+                  <p className="admin-dashboard-home__activity-name">{row.profiles?.full_name || "Unknown Employee"}</p>
+                  <p className="app-copy-sm">
                     {row.profiles?.employee_id || "No Employee ID"} | {row.cutoff}
                   </p>
-                  <p className="text-xs text-slate-400">{new Date(row.created_at).toLocaleString()}</p>
+                  <p className="app-copy-xs-muted">{new Date(row.created_at).toLocaleString()}</p>
                 </div>
                 <StatusBadge status={row.status} />
               </div>
             ))}
-            {recentDtrRows.length === 0 ? <p className="text-sm text-slate-500">No DTR activity yet.</p> : null}
+            {recentDtrRows.length === 0 ? <p className="admin-empty-copy">No DTR activity yet.</p> : null}
           </div>
         </Card>
 
         <Card>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-800">Recent Requirement Activity</h2>
-            <p className="text-xs text-slate-500">Employee documents and signatures</p>
+          <div className="admin-section-head">
+            <div>
+              <h2 className="admin-section-title admin-dashboard-home__section-title">Recent Requirement Activity</h2>
+              <p className="admin-section-copy">Employee documents and signatures</p>
+            </div>
           </div>
-          <div className="space-y-3">
+          <div className="admin-dashboard-home__activity-list">
             {recentRequirementRows.map((row) => (
-              <div
-                key={row.id}
-                className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between"
-              >
+              <div key={row.id} className="admin-list-card admin-dashboard-home__activity-item">
                 <div>
-                  <p className="font-semibold text-slate-800">{row.profiles?.full_name || "Unknown Employee"}</p>
-                  <p className="text-sm text-slate-500">
+                  <p className="admin-dashboard-home__activity-name">{row.profiles?.full_name || "Unknown Employee"}</p>
+                  <p className="app-copy-sm">
                     {row.profiles?.employee_id || "No Employee ID"} | {getRequirementTypeLabel(row)}
                   </p>
-                  <p className="text-xs text-slate-400">{new Date(row.created_at).toLocaleString()}</p>
+                  <p className="app-copy-xs-muted">{new Date(row.created_at).toLocaleString()}</p>
                 </div>
                 <StatusBadge status={row.status} />
               </div>
             ))}
-            {recentRequirementRows.length === 0 ? (
-              <p className="text-sm text-slate-500">No employee requirement activity yet.</p>
-            ) : null}
+            {recentRequirementRows.length === 0 ? <p className="admin-empty-copy">No employee requirement activity yet.</p> : null}
           </div>
         </Card>
       </div>
 
       <Card>
-        <h2 className="text-lg font-semibold text-slate-800">Employee Distribution</h2>
-        <p className="mt-1 text-sm text-slate-500">Top assigned locations based on onboarding records.</p>
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <h2 className="admin-section-title admin-dashboard-home__section-title">Employee Distribution</h2>
+        <p className="admin-section-copy app-copy-sm app-copy-xs-spaced admin-dashboard-home__distribution-copy">
+          Top assigned locations based on onboarding records.
+        </p>
+        <div className="admin-content-grid admin-content-grid--distribution admin-dashboard-home__distribution-grid">
           {locationSummary.map((item, index) => (
-            <div key={item.location}>
-              <div className="mb-1 flex items-center justify-between text-sm">
-                <span className="text-slate-700">
+            <div key={item.location} className="admin-dashboard-home__distribution-item">
+              <div className="admin-dashboard-home__distribution-row">
+                <span className="admin-dashboard-home__distribution-label">
                   {index + 1}. {item.location}
                 </span>
-                <span className="font-semibold text-slate-800">{item.count}</span>
+                <span className="admin-dashboard-home__distribution-count">{item.count}</span>
               </div>
-              <div className="h-2 rounded-full bg-slate-100">
+              <div className="admin-dashboard-home__distribution-bar">
                 <div
-                  className="h-2 rounded-full bg-brand-500"
+                  className="admin-dashboard-home__distribution-fill"
                   style={{ width: `${Math.max((item.count / locationSummary[0].count) * 100, 8)}%` }}
                 />
               </div>
             </div>
           ))}
-          {locationSummary.length === 0 ? (
-            <p className="text-sm text-slate-500">No employee location data available yet.</p>
-          ) : null}
+          {locationSummary.length === 0 ? <p className="admin-empty-copy">No employee location data available yet.</p> : null}
         </div>
       </Card>
     </div>

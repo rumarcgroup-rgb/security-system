@@ -1,39 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ArrowLeft, BriefcaseBusiness, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Input from "../../components/ui/Input";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
-
-const portalConfigs = {
-  "security-guard": {
-    title: "Security Guard",
-    subtitle: "Security Guard Portal",
-    heading: "Reset Security Guard Password",
-    accentClass: "from-[#0d4dc4] to-[#08347d]",
-    buttonClass: "bg-[#0d4dc4] hover:bg-[#0a3fa1]",
-    badgeClass: "bg-[#e8f0ff] text-[#0d4dc4]",
-    icon: ShieldCheck,
-  },
-  janitor: {
-    title: "Janitor",
-    subtitle: "Janitor Portal",
-    heading: "Reset Janitor Password",
-    accentClass: "from-[#0c8b4d] to-[#0b5f37]",
-    buttonClass: "bg-[#0c8b4d] hover:bg-[#0a733f]",
-    badgeClass: "bg-[#e6fff1] text-[#0c8b4d]",
-    icon: UserRound,
-  },
-  admin: {
-    title: "Admin",
-    subtitle: "Admin Portal",
-    heading: "Reset Admin Password",
-    accentClass: "from-[#123c94] to-[#0f2459]",
-    buttonClass: "bg-[#123c94] hover:bg-[#0f2f74]",
-    badgeClass: "bg-[#edf2ff] text-[#123c94]",
-    icon: BriefcaseBusiness,
-  },
-};
+import { getPortalConfig } from "./portalConfig";
+import "./ResetPasswordPage.css";
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
@@ -44,7 +16,7 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
-  const portal = useMemo(() => portalConfigs[portalType] ?? portalConfigs.admin, [portalType]);
+  const portal = useMemo(() => getPortalConfig(portalType) ?? getPortalConfig("admin"), [portalType]);
   const PortalIcon = portal.icon;
 
   useEffect(() => {
@@ -131,32 +103,38 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[linear-gradient(180deg,#e0efff_0%,#f4f8ff_26%,#dce8f7_100%)] p-4">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(12,74,110,0.18),transparent_32%)]" />
-      <div className="relative w-full max-w-[430px] overflow-hidden rounded-[34px] border border-white/70 bg-white shadow-[0_28px_80px_rgba(15,23,42,0.22)]">
-        <div className={`bg-gradient-to-r ${portal.accentClass} px-5 pb-5 pt-4 text-white`}>
-          <div className="flex items-center justify-between gap-3">
-            <Link to={`/login/${portalType || "admin"}`} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20">
+    <div className="app-auth-page reset-password-page">
+      <div className="app-auth-overlay reset-password-page__overlay" />
+      <div
+        className="app-auth-card reset-password-page__card"
+        style={{
+          "--portal-button-color": portal.theme.buttonColor,
+          "--portal-button-hover": portal.theme.buttonHover,
+        }}
+      >
+        <div className={`reset-password-page__hero bg-gradient-to-r ${portal.accentClass}`}>
+          <div className="reset-password-page__hero-head">
+            <Link to={`/login/${portalType || "admin"}`} className="reset-password-page__back">
               <ArrowLeft size={18} />
             </Link>
-            <div className="text-center">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm font-bold tracking-[0.04em]">
+            <div className="reset-password-page__hero-center">
+              <div className="reset-password-page__hero-pill">
                 <PortalIcon size={16} />
                 CGROUP
               </div>
-              <p className="mt-1 text-xs font-medium text-white/80">{portal.subtitle}</p>
+              <p className="reset-password-page__hero-copy">{portal.subtitle}</p>
             </div>
-            <div className="h-9 w-9" />
+            <div className="reset-password-page__hero-spacer" />
           </div>
         </div>
 
-        <div className="px-5 pb-6 pt-5">
-          <h1 className="text-[1.9rem] font-black tracking-[-0.03em] text-slate-800">{portal.heading}</h1>
-          <div className={`mt-2 h-1 w-24 rounded-full bg-gradient-to-r ${portal.accentClass}`} />
+        <div className="reset-password-page__body">
+          <h1 className="reset-password-page__title">{portal.resetHeading}</h1>
+          <div className={`reset-password-page__accent bg-gradient-to-r ${portal.accentClass}`} />
 
           {!isRecoveryMode ? (
-            <form className="mt-5 space-y-3" onSubmit={requestReset}>
-              <p className="text-sm text-slate-500">Enter your account email and we’ll send you a password reset link.</p>
+            <form className="reset-password-page__form" onSubmit={requestReset}>
+              <p className="reset-password-page__copy">Enter your account email and we'll send you a password reset link.</p>
               <Input
                 label="Email"
                 type="email"
@@ -164,19 +142,15 @@ export default function ResetPasswordPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter Email Address"
-                className="rounded-2xl"
+                className="reset-password-page__input"
               />
-              <button
-                className={`w-full rounded-2xl px-4 py-3 text-base font-bold text-white shadow-[0_16px_28px_rgba(15,23,42,0.16)] transition ${portal.buttonClass}`}
-                disabled={loading}
-                type="submit"
-              >
+              <button className={`reset-password-page__submit ${portal.buttonClass}`} disabled={loading} type="submit">
                 {loading ? "Sending..." : "Send Reset Link"}
               </button>
             </form>
           ) : (
-            <form className="mt-5 space-y-3" onSubmit={updatePassword}>
-              <p className="text-sm text-slate-500">Enter your new password below.</p>
+            <form className="reset-password-page__form" onSubmit={updatePassword}>
+              <p className="reset-password-page__copy">Enter your new password below.</p>
               <Input
                 label="New Password"
                 type="password"
@@ -185,7 +159,7 @@ export default function ResetPasswordPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter New Password"
-                className="rounded-2xl"
+                className="reset-password-page__input"
               />
               <Input
                 label="Confirm Password"
@@ -195,19 +169,15 @@ export default function ResetPasswordPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm New Password"
-                className="rounded-2xl"
+                className="reset-password-page__input"
               />
-              <button
-                className={`w-full rounded-2xl px-4 py-3 text-base font-bold text-white shadow-[0_16px_28px_rgba(15,23,42,0.16)] transition ${portal.buttonClass}`}
-                disabled={loading}
-                type="submit"
-              >
+              <button className={`reset-password-page__submit ${portal.buttonClass}`} disabled={loading} type="submit">
                 {loading ? "Updating..." : "Update Password"}
               </button>
             </form>
           )}
 
-          <Link to={`/login/${portalType || "admin"}`} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-700">
+          <Link to={`/login/${portalType || "admin"}`} className="reset-password-page__return">
             <ArrowLeft size={14} />
             Back to login
           </Link>

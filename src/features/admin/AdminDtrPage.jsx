@@ -1,21 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ExternalLink, Search } from "lucide-react";
+import { ExternalLink, Search, X } from "lucide-react";
 import Card from "../../components/ui/Card";
 import Select from "../../components/ui/Select";
 import Button from "../../components/ui/Button";
 import StatusBadge from "../../components/ui/StatusBadge";
 import Modal from "../../components/ui/Modal";
+import { getBranchesForArea, sortBranches } from "../../lib/branches";
+import { sortAreas } from "../../lib/areas";
 import { supabase } from "../../lib/supabase";
 import { attachSignedUrls } from "../../lib/storage";
 import { mergeCutoffOptions } from "../../lib/dtr";
+import "./AdminDtrPage.css";
 
 const statusOptions = ["All", "Pending Review", "Approved", "Rejected"];
 
 export default function AdminDtrPage() {
   const [rows, setRows] = useState([]);
-  const [filters, setFilters] = useState({ area: "All", cutoff: "All", status: "All", q: "" });
+  const [filters, setFilters] = useState({ area: "All", branch: "All", cutoff: "All", status: "All", q: "" });
   const [reviewItem, setReviewItem] = useState(null);
   const [adminRemarks, setAdminRemarks] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,7 +35,7 @@ export default function AdminDtrPage() {
   async function loadRows() {
     const { data, error } = await supabase
       .from("dtr_submissions")
-      .select("id,user_id,cutoff,employee_note,admin_remarks,file_url,status,approved_at,created_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,role,employee_id,location)")
+      .select("id,user_id,cutoff,employee_note,admin_remarks,file_url,status,approved_at,created_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,role,employee_id,location,branch)")
       .order("created_at", { ascending: false });
     if (!error) {
       const withSignedUrls = await attachSignedUrls(data || [], "dtr-images");
@@ -42,8 +45,16 @@ export default function AdminDtrPage() {
 
   const areas = useMemo(() => {
     const list = Array.from(new Set(rows.map((r) => r.profiles?.location).filter(Boolean)));
-    return ["All", ...list];
+    return ["All", ...sortAreas(list)];
   }, [rows]);
+
+  const branches = useMemo(() => {
+    const list =
+      filters.area !== "All"
+        ? getBranchesForArea(filters.area)
+        : Array.from(new Set(rows.map((r) => r.profiles?.branch).filter(Boolean)));
+    return ["All", ...sortBranches(list)];
+  }, [filters.area, rows]);
 
   const cutoffOptions = useMemo(() => {
     return ["All", ...mergeCutoffOptions(rows.map((row) => row.cutoff), new Date(), 48)];
@@ -54,18 +65,23 @@ export default function AdminDtrPage() {
       const name = (r.profiles?.full_name || "").toLowerCase();
       const empId = (r.profiles?.employee_id || "").toLowerCase();
       const byArea = filters.area === "All" || r.profiles?.location === filters.area;
+      const byBranch = filters.branch === "All" || r.profiles?.branch === filters.branch;
       const byCutoff = filters.cutoff === "All" || r.cutoff === filters.cutoff;
       const byStatus = filters.status === "All" || r.status === filters.status;
       const byQ = !filters.q || name.includes(filters.q.toLowerCase()) || empId.includes(filters.q.toLowerCase());
-      return byArea && byCutoff && byStatus && byQ;
+      return byArea && byBranch && byCutoff && byStatus && byQ;
     });
   }, [rows, filters]);
 
   const grouped = useMemo(() => {
-    return filtered.reduce((acc, item) => {
+    const groupedMap = filtered.reduce((acc, item) => {
       const key = item.profiles?.location || "Unassigned";
       if (!acc[key]) acc[key] = [];
       acc[key].push(item);
+      return acc;
+    }, {});
+    return sortAreas(Object.keys(groupedMap)).reduce((acc, key) => {
+      acc[key] = groupedMap[key];
       return acc;
     }, {});
   }, [filtered]);
@@ -101,21 +117,26 @@ export default function AdminDtrPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="admin-page admin-dtr-page">
       <Card>
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-800">Employee DTR Review Queue</h2>
-            <p className="text-sm text-slate-500">All DTR submissions sent by employees appear here for admin approval.</p>
+        <div className="admin-section-head">
+          <div className="admin-section-intro">
+            <h2 className="admin-section-title">Employee DTR Review Queue</h2>
+            <p className="admin-section-copy">All DTR submissions sent by employees appear here for admin approval.</p>
           </div>
-          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+          <span className="app-pill app-pill--warning">
             {rows.filter((row) => row.status === "Pending Review").length} Pending
           </span>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-6">
+        <div className="admin-filters-grid admin-filters-grid--queue">
           <Select label="Area" value={filters.area} onChange={(e) => setFilters((p) => ({ ...p, area: e.target.value }))}>
             {areas.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </Select>
+          <Select label="Branch" value={filters.branch} onChange={(e) => setFilters((p) => ({ ...p, branch: e.target.value }))}>
+            {branches.map((item) => (
               <option key={item}>{item}</option>
             ))}
           </Select>
@@ -137,28 +158,26 @@ export default function AdminDtrPage() {
               <option key={item}>{item}</option>
             ))}
           </Select>
-          <div className="md:col-span-2">
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Search</span>
-              <div className="relative">
-                <Search size={16} className="absolute left-3 top-3 text-slate-400" />
-                <input
-                  className="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-3 text-sm focus:border-brand-500"
-                  placeholder="Employee name or ID"
-                  value={filters.q}
-                  onChange={(e) => setFilters((p) => ({ ...p, q: e.target.value }))}
-                />
-              </div>
-            </label>
-          </div>
-          <div className="flex items-end gap-2">
-            <Button className="w-full" onClick={loadRows}>
+          <label className="admin-search-label admin-search-label--wide">
+            <span className="admin-search-label-text">Search</span>
+            <div className="admin-search-wrap">
+              <Search size={16} className="admin-search-icon" />
+              <input
+              className="admin-search-input"
+                placeholder="Employee name or ID"
+                value={filters.q}
+                onChange={(e) => setFilters((p) => ({ ...p, q: e.target.value }))}
+              />
+            </div>
+          </label>
+          <div className="admin-filter-actions">
+            <Button className="admin-button-full" onClick={loadRows}>
               Filter
             </Button>
             <Button
-              className="w-full"
+              className="admin-button-full"
               variant="secondary"
-              onClick={() => setFilters({ area: "All", cutoff: "All", status: "All", q: "" })}
+              onClick={() => setFilters({ area: "All", branch: "All", cutoff: "All", status: "All", q: "" })}
             >
               Reset
             </Button>
@@ -170,57 +189,55 @@ export default function AdminDtrPage() {
         const pendingCount = items.filter((x) => x.status === "Pending Review").length;
         return (
           <Card key={location}>
-            <h3 className="mb-3 text-base font-semibold text-slate-800">
+            <h3 className="admin-dtr-page__group-title">
               {location} ({pendingCount} Pending)
             </h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+            <div className="admin-table-wrap admin-dtr-page__table-wrap">
+              <table className="admin-table admin-dtr-page__table">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
-                    <th className="pb-2">Employee</th>
-                    <th className="pb-2">Employee ID</th>
-                    <th className="pb-2">Selected Cutoff</th>
-                    <th className="pb-2">DTR Preview</th>
-                    <th className="pb-2">Date Submitted</th>
-                    <th className="pb-2">Date Approved</th>
-                    <th className="pb-2">Status</th>
-                    <th className="pb-2">Action</th>
+                  <tr className="admin-table-head-row admin-table-head-row--sm">
+                    <th className="admin-table-head-cell">Employee</th>
+                    <th className="admin-table-head-cell">Employee ID</th>
+                    <th className="admin-table-head-cell">Selected Cutoff</th>
+                    <th className="admin-table-head-cell">DTR Preview</th>
+                    <th className="admin-table-head-cell">Date Submitted</th>
+                    <th className="admin-table-head-cell">Date Approved</th>
+                    <th className="admin-table-head-cell">Status</th>
+                    <th className="admin-table-head-cell">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item) => (
-                    <tr key={item.id} className="border-b border-slate-100">
-                      <td className="py-2">
-                        <p className="font-medium text-slate-700">{item.profiles?.full_name || "Unknown"}</p>
-                        <p className="text-xs text-slate-500">{item.profiles?.role || "Employee"}</p>
+                    <tr key={item.id} className="admin-table-row">
+                      <td className="admin-table-cell">
+                        <p className="admin-dtr-page__employee-name">{item.profiles?.full_name || "Unknown"}</p>
+                        <p className="admin-dtr-page__employee-role">{item.profiles?.role || "Employee"}</p>
+                        <p className="admin-dtr-page__employee-branch">{item.profiles?.branch || "No branch"}</p>
                       </td>
-                      <td className="py-2">{item.profiles?.employee_id || "-"}</td>
-                      <td className="py-2">{item.cutoff || "-"}</td>
-                      <td className="py-2">
+                      <td className="admin-table-cell">{item.profiles?.employee_id || "-"}</td>
+                      <td className="admin-table-cell">{item.cutoff || "-"}</td>
+                      <td className="admin-table-cell">
                         {item.preview_url ? (
-                          <a href={item.preview_url} target="_blank" rel="noreferrer" className="block">
+                          <a href={item.preview_url} target="_blank" rel="noreferrer" className="app-preview-thumb-link">
                             <img
                               src={item.preview_url}
                               alt="DTR preview"
-                              className="h-12 w-16 rounded-md object-cover transition hover:opacity-85"
+                              className="app-preview-thumb"
                             />
                           </a>
                         ) : (
-                          <div className="flex h-12 w-16 items-center justify-center rounded-md bg-slate-100 text-[10px] text-slate-500">
+                          <div className="app-preview-thumb-empty">
                             No Preview
                           </div>
                         )}
                       </td>
-                      <td className="py-2">{new Date(item.created_at).toLocaleString()}</td>
-                      <td className="py-2">{item.approved_at ? new Date(item.approved_at).toLocaleString() : "-"}</td>
-                      <td className="py-2">
+                      <td className="admin-table-cell">{new Date(item.created_at).toLocaleString()}</td>
+                      <td className="admin-table-cell">{item.approved_at ? new Date(item.approved_at).toLocaleString() : "-"}</td>
+                      <td className="admin-table-cell">
                         <StatusBadge status={item.status} />
                       </td>
-                      <td className="py-2">
-                        <Button
-                          className="px-3 py-1.5 text-xs"
-                          onClick={() => openReview(item)}
-                        >
+                      <td className="admin-table-cell">
+                        <Button className="app-compact-button" onClick={() => openReview(item)}>
                           Review
                         </Button>
                       </td>
@@ -233,32 +250,52 @@ export default function AdminDtrPage() {
         );
       })}
 
-      {filtered.length === 0 ? <p className="text-sm text-slate-500">No submissions found.</p> : null}
+      {filtered.length === 0 ? <p className="admin-empty-copy admin-dtr-page__empty">No submissions found.</p> : null}
 
-      <div className="text-sm text-slate-500">
-        Need to review a new employee submission from the dashboard? Open <Link className="font-medium text-brand-600 hover:underline" to="/admin">Dashboard</Link> for the latest activity, then come back here to approve or reject it.
+      <div className="admin-section-copy admin-dtr-page__helper">
+        Need to review a new employee submission from the dashboard? Open{" "}
+        <Link className="app-inline-link" to="/admin">
+          Dashboard
+        </Link>{" "}
+        for the latest activity, then come back here to approve or reject it.
       </div>
 
-      <Modal open={Boolean(reviewItem)} onClose={closeReview} title="Review DTR Submission">
+      <Modal open={Boolean(reviewItem)} onClose={closeReview}>
+
         {reviewItem ? (
-          <div className="space-y-4">
-            <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-              <p>
-                <span className="font-semibold text-slate-800">Selected Cutoff:</span> {reviewItem.cutoff || "Not set"}
+          <div className="app-modal-stack">
+            <div className="admin-modal-header">
+              <p className="app-text-strong-md">Review DTR Submission</p>
+              <button
+                type="button"
+                aria-label="Close message"
+                className="app-icon-close"
+                onClick={() => closeReview()}
+              >
+                <X size={18} />
+              </button>
+
+            </div>
+            <div className="admin-card-panel admin-dtr-page__summary">
+              <p className="app-summary-line">
+                <span className="app-summary-label">Area / Branch:</span> {reviewItem.profiles?.location || "Unassigned"} / {reviewItem.profiles?.branch || "No branch"}
               </p>
-              <p className="mt-1">
-                <span className="font-semibold text-slate-800">Submitted:</span> {new Date(reviewItem.created_at).toLocaleString()}
+              <p className="app-summary-line">
+                <span className="app-summary-label">Selected Cutoff:</span> {reviewItem.cutoff || "Not set"}
               </p>
-              <p className="mt-1">
-                <span className="font-semibold text-slate-800">Approved At:</span>{" "}
+              <p className="app-summary-line">
+                <span className="app-summary-label">Submitted:</span> {new Date(reviewItem.created_at).toLocaleString()}
+              </p>
+              <p className="app-summary-line">
+                <span className="app-summary-label">Approved At:</span>{" "}
                 {reviewItem.approved_at ? new Date(reviewItem.approved_at).toLocaleString() : "Not approved yet"}
               </p>
-              <p className="mt-1">
-                <span className="font-semibold text-slate-800">Employee Note:</span>{" "}
+              <p className="app-summary-line">
+                <span className="app-summary-label">Employee Note:</span>{" "}
                 {reviewItem.employee_note?.trim() || "No note provided"}
               </p>
-              <p className="mt-1">
-                <span className="font-semibold text-slate-800">Admin Remarks:</span>{" "}
+              <p className="app-summary-line">
+                <span className="app-summary-label">Admin Remarks:</span>{" "}
                 {reviewItem.admin_remarks?.trim() || "No remarks yet"}
               </p>
             </div>
@@ -267,36 +304,36 @@ export default function AdminDtrPage() {
                 href={reviewItem.preview_url}
                 target="_blank"
                 rel="noreferrer"
-                className="group block overflow-hidden rounded-xl"
+                className="app-preview-image-link app-preview-overlay-link"
                 title="Open submitted image"
               >
-                <div className="relative">
+                <div className="app-preview-frame-wrap">
                   <img
                     src={reviewItem.preview_url}
                     alt="DTR full preview"
-                    className="max-h-[60vh] w-full rounded-xl object-contain transition group-hover:scale-[1.01]"
+                    className="app-preview-image admin-dtr-page__modal-preview-image"
                   />
-                  <div className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-full bg-slate-900/70 px-3 py-1 text-xs font-medium text-white opacity-0 transition group-hover:opacity-100">
+                  <div className="app-preview-chip">
                     <ExternalLink size={14} />
                     View Full Image
                   </div>
                 </div>
               </a>
             ) : (
-              <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+              <div className="app-empty-box">
                 Unable to load preview URL.
               </div>
             )}
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Admin Remarks</span>
+            <label className="app-field-block admin-dtr-page__remarks">
+              <span className="app-field-label">Admin Remarks</span>
               <textarea
-                className="min-h-[96px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-brand-500"
+                className="app-textarea"
                 placeholder="Add remarks for the employee before approving or rejecting"
                 value={adminRemarks}
                 onChange={(e) => setAdminRemarks(e.target.value)}
               />
             </label>
-            <div className="flex justify-end gap-2">
+            <div className="app-modal-footer">
               <Button variant="secondary" onClick={() => updateStatus("Pending Review")} loading={loading}>
                 Return Pending
               </Button>

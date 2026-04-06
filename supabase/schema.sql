@@ -7,6 +7,7 @@ create table if not exists public.profiles (
   role text not null default 'employee',
   employee_id text unique,
   location text,
+  branch text,
   birthday date,
   age int,
   gender text,
@@ -77,6 +78,9 @@ alter table public.profiles
 alter table public.profiles
   add column if not exists avatar_url text;
 
+alter table public.profiles
+  add column if not exists branch text;
+
 alter table public.employee_documents
   add column if not exists review_status text not null default 'Pending Review';
 
@@ -115,6 +119,10 @@ alter table public.profile_change_requests
 
 alter table public.profile_change_requests
   add column if not exists requested_tin text;
+
+update public.profiles
+set branch = 'Main'
+where branch is null or trim(branch) = '';
 
 do $$
 begin
@@ -192,6 +200,7 @@ $$;
 
 create index if not exists idx_profiles_role on public.profiles(role);
 create index if not exists idx_profiles_location on public.profiles(location);
+create index if not exists idx_profiles_branch on public.profiles(branch);
 create index if not exists idx_dtr_submissions_user_id on public.dtr_submissions(user_id);
 create index if not exists idx_dtr_submissions_status on public.dtr_submissions(status);
 create index if not exists idx_dtr_submissions_created_at on public.dtr_submissions(created_at desc);

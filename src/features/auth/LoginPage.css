@@ -66,23 +66,10 @@
 
 .login-selector__copy {
   position: relative;
-  margin-top: 1rem;
+  margin-top: 20rem;
   text-align: center;
   color: white;
-}
 
-.login-selector__welcome {
-  margin-top: 1.25rem;
-  font-size: 15px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.login-selector__brand {
-  margin-top: 0.25rem;
-  font-size: 2rem;
-  font-weight: 900;
-  letter-spacing: -0.03em;
 }
 
 .login-selector__badge {
@@ -147,6 +134,18 @@
 .login-selector__card-copy {
   min-width: 0;
   flex: 1;
+}
+
+.login-selector__card-title--cgroup {
+  color: #153f91;
+}
+
+.login-selector__card-title--security {
+  color: #143d86;
+}
+
+.login-selector__card-title--janitor {
+  color: #0f7b4d;
 }
 
 .login-selector__card-title {
@@ -419,6 +418,10 @@
   padding: 1.25rem 1.25rem 1.5rem;
 }
 
+.login-page__content--standard {
+  padding-top: 1.25rem;
+}
+
 .login-page__content--security {
   padding-top: 0.5rem;
 }
@@ -491,6 +494,7 @@
 }
 
 .login-page__password-input:focus {
+  outline: none;
   border-color: #0c8b4d;
 }
 
@@ -519,14 +523,18 @@
   padding: 0.75rem 1rem;
   font-size: 1rem;
   font-weight: 700;
-  color: white;
-  background: var(--portal-button-color);
+  color: rgb(247, 247, 247);
+  background: rgb(12, 36, 143);
   box-shadow: 0 16px 28px rgba(15, 23, 42, 0.16);
   transition: background-color 150ms ease;
 }
 
 .login-page__submit:hover {
-  background: var(--portal-button-hover);
+  background: rgb(129, 143, 202);
+}
+
+.login-page__submit:disabled {
+  opacity: 0.75;
 }
 
 .login-page__link {

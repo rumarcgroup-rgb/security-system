@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Camera, Upload } from "lucide-react";
@@ -6,7 +6,11 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
+import { AREA_OPTIONS } from "../../lib/areas";
+import { getBranchesForArea } from "../../lib/branches";
+import { saveEmployeePortalType } from "../../lib/employeePortal";
 import { supabase } from "../../lib/supabase";
+import "./OnboardingPage.css";
 
 const steps = [
   "Account Setup",
@@ -73,7 +77,8 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
     philhealth: "",
     pagibig: "",
     tin: "",
-    location: "ABC Building",
+    location: AREA_OPTIONS[0],
+    branch: "",
     position: "Janitor",
     start_date: "",
     shift: "AM",
@@ -93,6 +98,7 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
   const visibleSteps = user ? steps.slice(1) : steps;
   const visibleStepNumber = user ? step - 1 : step;
   const totalSteps = visibleSteps.length;
+  const branchOptions = useMemo(() => getBranchesForArea(form.location), [form.location]);
 
   useEffect(() => {
     const storedPendingSignup = getPendingSignup();
@@ -115,6 +121,16 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
     if (!user || !profile) return;
     navigate(profile.role === "admin" ? "/admin" : "/", { replace: true });
   }, [navigate, profile, user]);
+
+  useEffect(() => {
+    setForm((prev) => {
+      if (branchOptions.includes(prev.branch)) return prev;
+      return {
+        ...prev,
+        branch: branchOptions[0] || "",
+      };
+    });
+  }, [branchOptions]);
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -213,6 +229,7 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
         role: "employee",
         employee_id: form.employee_id || `EMP-${Math.floor(Math.random() * 90000 + 10000)}`,
         location: form.location,
+        branch: form.branch,
         birthday: form.birthday,
         age: Number(form.age) || null,
         gender: form.gender,
@@ -228,6 +245,13 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
         signature_url: signaturePath,
       });
       if (profileErr) throw profileErr;
+      saveEmployeePortalType(
+        form.position === "Security Guard"
+          ? "security-guard"
+          : form.position === "Janitor"
+            ? "janitor"
+            : "cgroup-access"
+      );
 
       for (const type of docTypes) {
         if (!docs[type]) continue;
@@ -264,41 +288,41 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
   }
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-2xl p-4 md:p-8">
-      <Card className="mb-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-bold text-slate-800">Employee Onboarding</h1>
-          <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">
+    <div className="onboarding-page">
+      <Card className="onboarding-page__progress-card">
+        <div className="onboarding-page__progress-head">
+          <h1 className="onboarding-page__title">Employee Onboarding</h1>
+          <span className="onboarding-page__step-pill">
             Step {visibleStepNumber} of {totalSteps}
           </span>
         </div>
-        <div className="mt-3 h-2 rounded-full bg-slate-100">
+        <div className="onboarding-page__progress-track">
           <div
-            className="h-2 rounded-full bg-brand-500 transition-all"
+            className="onboarding-page__progress-fill"
             style={{ width: `${(visibleStepNumber / totalSteps) * 100}%` }}
           />
         </div>
-        <p className="mt-2 text-sm text-slate-500">{visibleSteps[visibleStepNumber - 1]}</p>
+        <p className="onboarding-page__step-copy">{visibleSteps[visibleStepNumber - 1]}</p>
       </Card>
 
       <Card>
         {step === 1 ? (
-          <div className="space-y-4 py-2">
-            <h2 className="text-2xl font-bold">{user ? "Continue Onboarding" : "Create Your Account"}</h2>
-            <p className="text-sm text-slate-600">
+          <div className="onboarding-page__intro">
+            <h2 className="onboarding-page__hero-title">{user ? "Continue Onboarding" : "Create Your Account"}</h2>
+            <p className="onboarding-page__hero-copy">
               Kumpletuhin ang registration para makapagsumite ka ng DTR at makita ang iyong employee records.
             </p>
             {pendingSignup?.email && !user ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                A signup request is already pending for <span className="font-semibold">{pendingSignup.email}</span>.
+              <div className="onboarding-page__notice onboarding-page__notice--pending">
+                A signup request is already pending for <span className="onboarding-page__emphasis">{pendingSignup.email}</span>.
                 Confirm the email first, then log in to continue onboarding.
               </div>
             ) : null}
 
             {!user ? (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="app-form-grid app-form-grid--two">
                 <Input
-                  className="md:col-span-2"
+                  className="app-form-grid-full"
                   label="Email Address"
                   type="email"
                   value={account.email}
@@ -320,29 +344,29 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
                 />
               </div>
             ) : (
-              <div className="rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-700">
+              <div className="onboarding-page__notice onboarding-page__notice--success">
                 Your account is already signed in. Continue filling out your employee onboarding details below.
               </div>
             )}
 
             <Button onClick={() => setStep(2)}>Start Registration</Button>
-            <Link className="block text-sm font-medium text-brand-600 hover:underline" to="/login">
+            <Link className="app-inline-link" to="/login">
               Already Registered? Login
             </Link>
           </div>
         ) : null}
 
         {step === 2 ? (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="app-form-grid app-form-grid--two">
             <Input label="First Name" value={form.first_name} onChange={(e) => setField("first_name", e.target.value)} />
             <Input label="Last Name" value={form.last_name} onChange={(e) => setField("last_name", e.target.value)} />
             <Input label="Birthday" type="date" value={form.birthday} onChange={(e) => setField("birthday", e.target.value)} />
             <Input label="Age" type="number" value={form.age} onChange={(e) => setField("age", e.target.value)} />
             <div>
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Gender</span>
-              <div className="flex gap-4 text-sm">
+              <span className="app-field-label">Gender</span>
+              <div className="onboarding-page__radio-group">
                 {["Male", "Female"].map((item) => (
-                  <label key={item} className="flex items-center gap-2">
+                  <label key={item} className="onboarding-page__radio-label">
                     <input
                       type="radio"
                       name="gender"
@@ -363,7 +387,7 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
         ) : null}
 
         {step === 3 ? (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="app-form-grid app-form-grid--two">
             <Input label="SSS" value={form.sss} onChange={(e) => setField("sss", e.target.value)} />
             <Input label="PhilHealth" value={form.philhealth} onChange={(e) => setField("philhealth", e.target.value)} />
             <Input label="Pag-IBIG" value={form.pagibig} onChange={(e) => setField("pagibig", e.target.value)} />
@@ -372,17 +396,23 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
         ) : null}
 
         {step === 4 ? (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="app-form-grid app-form-grid--two">
             <Select label="Assigned Site" value={form.location} onChange={(e) => setField("location", e.target.value)}>
-              <option>ABC Building</option>
-              <option>XYZ Tower</option>
-              <option>UP</option>
-              <option>Main Plant</option>
+              {AREA_OPTIONS.map((area) => (
+                <option key={area}>{area}</option>
+              ))}
+            </Select>
+            <Select label="Branch" value={form.branch} onChange={(e) => setField("branch", e.target.value)}>
+              {branchOptions.length === 0 ? <option value="">No branches for this area</option> : null}
+              {branchOptions.map((branch) => (
+                <option key={branch}>{branch}</option>
+              ))}
             </Select>
             <Select label="Position" value={form.position} onChange={(e) => setField("position", e.target.value)}>
+              <option>CGroup Access</option>
               <option>Janitor</option>
               <option>Security Guard</option>
-              <option>Maintenance Staff</option>
+              <option>Area Supervisor</option>
             </Select>
             <Input label="Employee ID" value={form.employee_id} onChange={(e) => setField("employee_id", e.target.value)} />
             <Input label="Start Date" type="date" value={form.start_date} onChange={(e) => setField("start_date", e.target.value)} />
@@ -396,54 +426,54 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
         ) : null}
 
         {step === 5 ? (
-          <div className="space-y-3">
+          <div className="onboarding-page__docs-list">
             {docTypes.map((type) => (
-              <div key={type} className="rounded-xl border border-slate-200 p-3">
-                <p className="mb-2 text-sm font-medium">{type}</p>
-                <div className="flex gap-2">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
+              <div key={type} className="onboarding-page__doc-card">
+                <p className="app-field-label">{type}</p>
+                <div className="onboarding-page__doc-actions">
+                  <label className="onboarding-page__doc-button">
                     <Camera size={16} /> Take Photo
                     <input
                       type="file"
                       accept="image/*"
                       capture="environment"
-                      className="hidden"
+                      className="onboarding-page__hidden-input"
                       onChange={(e) => setDocs((prev) => ({ ...prev, [type]: e.target.files?.[0] ?? null }))}
                     />
                   </label>
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
+                  <label className="onboarding-page__doc-button">
                     <Upload size={16} /> Upload from Gallery
                     <input
                       type="file"
                       accept="image/*,.pdf"
-                      className="hidden"
+                      className="onboarding-page__hidden-input"
                       onChange={(e) => setDocs((prev) => ({ ...prev, [type]: e.target.files?.[0] ?? null }))}
                     />
                   </label>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">{docs[type]?.name ?? "No file selected"}</p>
+                <p className="onboarding-page__doc-copy">{docs[type]?.name ?? "No file selected"}</p>
               </div>
             ))}
           </div>
         ) : null}
 
         {step === 6 ? (
-          <div className="space-y-4">
-            <label className="flex items-start gap-2 text-sm">
+          <div className="onboarding-page__terms">
+            <label className="onboarding-page__checkbox">
               <input type="checkbox" checked={form.agree1} onChange={(e) => setField("agree1", e.target.checked)} />
               I agree that all submitted records are accurate and complete.
             </label>
-            <label className="flex items-start gap-2 text-sm">
+            <label className="onboarding-page__checkbox">
               <input type="checkbox" checked={form.agree2} onChange={(e) => setField("agree2", e.target.checked)} />
               I authorize CGROUP of COMPANIES to process and store these records for HR and payroll use.
             </label>
             <div>
-              <p className="mb-2 text-sm font-medium">Signature</p>
+              <p className="app-field-label">Signature</p>
               <canvas
                 ref={canvasRef}
                 width={800}
                 height={220}
-                className="w-full rounded-xl border border-slate-300 bg-white"
+                className="onboarding-page__signature-canvas"
                 onMouseDown={startDraw}
                 onMouseUp={endDraw}
                 onMouseMove={draw}
@@ -452,7 +482,7 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
                 onTouchEnd={endDraw}
                 onTouchMove={draw}
               />
-              <button className="mt-2 text-xs font-medium text-rose-600 hover:underline" onClick={clearSignature}>
+              <button className="app-inline-link app-inline-link--danger" onClick={clearSignature}>
                 Clear Signature
               </button>
             </div>
@@ -463,7 +493,7 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
         ) : null}
 
         {step > 1 ? (
-          <div className="mt-5 flex justify-between">
+          <div className="app-actions-between">
             <Button variant="secondary" onClick={() => setStep((prev) => Math.max(prev - 1, user ? 2 : 1))}>
               Back
             </Button>

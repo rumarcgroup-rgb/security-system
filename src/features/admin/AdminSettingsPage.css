@@ -1,0 +1,27 @@
+.admin-settings-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-settings-page__form-grid {
+  margin-top: 1rem;
+}
+
+.admin-settings-page__actions {
+  margin-top: 1.25rem;
+}
+
+.admin-settings-page__notes {
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.admin-settings-page__note {
+}
+
+@media (min-width: 1280px) {
+  .admin-settings-page {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  }
+}

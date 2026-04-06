@@ -4,6 +4,7 @@ import Card from "../../components/ui/Card";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import { supabase } from "../../lib/supabase";
+import "./AdminSettingsPage.css";
 
 export default function AdminSettingsPage({ profile, refreshProfile }) {
   const [form, setForm] = useState({
@@ -46,12 +47,14 @@ export default function AdminSettingsPage({ profile, refreshProfile }) {
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
+    <div className="admin-page admin-settings-page">
       <Card>
-        <h2 className="text-lg font-semibold text-slate-800">Admin Profile Settings</h2>
-        <p className="mt-1 text-sm text-slate-500">Keep the dashboard identity and assignment details current.</p>
+        <div className="admin-section-intro">
+          <h2 className="admin-section-title">Admin Profile Settings</h2>
+          <p className="admin-section-copy">Keep the dashboard identity and assignment details current.</p>
+        </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="app-form-grid app-form-grid--two admin-settings-page__form-grid">
           <Input label="Full Name" value={form.full_name} onChange={(e) => setField("full_name", e.target.value)} />
           <Input label="Assigned Location" value={form.location} onChange={(e) => setField("location", e.target.value)} />
           <Input label="Position" value={form.position} onChange={(e) => setField("position", e.target.value)} />
@@ -59,7 +62,7 @@ export default function AdminSettingsPage({ profile, refreshProfile }) {
           <Input label="Shift" value={form.shift} onChange={(e) => setField("shift", e.target.value)} />
         </div>
 
-        <div className="mt-5">
+        <div className="admin-settings-page__actions">
           <Button loading={saving} onClick={saveSettings}>
             Save Settings
           </Button>
@@ -67,19 +70,21 @@ export default function AdminSettingsPage({ profile, refreshProfile }) {
       </Card>
 
       <Card>
-        <h2 className="text-lg font-semibold text-slate-800">System Notes</h2>
-        <div className="mt-4 space-y-3 text-sm text-slate-600">
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="font-semibold text-slate-800">Storage buckets</p>
-            <p className="mt-1">Private buckets expected by the app: `dtr-images` and `documents`.</p>
+        <div className="admin-section-intro">
+          <h2 className="admin-section-title">System Notes</h2>
+        </div>
+        <div className="admin-stack-sm admin-settings-page__notes">
+          <div className="admin-card-panel admin-settings-page__note">
+            <p className="app-note-title">Storage buckets</p>
+            <p className="app-note-copy">Private buckets expected by the app: `dtr-images` and `documents`.</p>
           </div>
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="font-semibold text-slate-800">Access model</p>
-            <p className="mt-1">Admin access is controlled through `profiles.role = 'admin'` and enforced in RLS.</p>
+          <div className="admin-card-panel admin-settings-page__note">
+            <p className="app-note-title">Access model</p>
+            <p className="app-note-copy">Admin access is controlled through `profiles.role = 'admin'` and enforced in RLS.</p>
           </div>
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="font-semibold text-slate-800">Current admin account</p>
-            <p className="mt-1 break-all">{profile?.id || "No active profile loaded."}</p>
+          <div className="admin-card-panel admin-settings-page__note">
+            <p className="app-note-title">Current admin account</p>
+            <p className="app-note-copy app-note-copy--break">{profile?.id || "No active profile loaded."}</p>
           </div>
         </div>
       </Card>

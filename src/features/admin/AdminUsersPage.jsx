@@ -7,12 +7,16 @@ import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import StatusBadge from "../../components/ui/StatusBadge";
+import { AREA_OPTIONS, sortAreas } from "../../lib/areas";
+import { getBranchesForArea } from "../../lib/branches";
 import { supabase } from "../../lib/supabase";
 import { attachSignedUrls } from "../../lib/storage";
 import { formatLastSeen, isEmployeeOnline } from "../../lib/presence";
+import "./AdminUsersPage.css";
 
 const REQUIRED_DOCUMENTS = ["Valid ID", "NBI Clearance", "Medical Certificate", "Barangay Clearance", "Signature"];
 const REVIEWABLE_STATUSES = ["Pending Review", "Verified", "Needs Reupload"];
+const POSITION_OPTIONS = ["CGroup Access", "Security Guard", "Janitor", "Maintenance Staff"];
 
 function isPdfFile(path = "") {
   return /\.pdf($|\?)/i.test(path);
@@ -26,16 +30,20 @@ function PresenceBadge({ lastSeenAt }) {
   const online = isEmployeeOnline(lastSeenAt);
 
   return (
-    <div className="space-y-1">
+    <div className="admin-users-page__presence">
       <span
-        className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${
-          online ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+        className={`app-pill ${
+          online ? "app-pill--success" : "app-pill--muted"
         }`}
       >
-        <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-slate-400"}`} />
+        <span
+          className={`app-pill-dot ${
+            online ? "app-pill-dot--success" : "app-pill-dot--muted"
+          }`}
+        />
         {online ? "Online" : "Offline"}
       </span>
-      <p className="text-xs text-slate-500">Last seen: {formatLastSeen(lastSeenAt)}</p>
+      <p className="admin-copy-xs">Last seen: {formatLastSeen(lastSeenAt)}</p>
     </div>
   );
 }
@@ -54,8 +62,9 @@ export default function AdminUsersPage() {
   const [reviewRequest, setReviewRequest] = useState(null);
   const [savingRequestId, setSavingRequestId] = useState(null);
   const [assignmentProfile, setAssignmentProfile] = useState(null);
-  const [assignmentForm, setAssignmentForm] = useState({ location: "", position: "" });
+  const [assignmentForm, setAssignmentForm] = useState({ location: "", branch: "", position: "" });
   const [savingAssignment, setSavingAssignment] = useState(false);
+  const assignmentBranchOptions = useMemo(() => getBranchesForArea(assignmentForm.location), [assignmentForm.location]);
 
   useEffect(() => {
     loadPageData();
@@ -221,21 +230,34 @@ export default function AdminUsersPage() {
     setAssignmentProfile(profile);
     setAssignmentForm({
       location: profile.location || "",
+      branch: profile.branch || "",
       position: profile.position || "",
     });
   }
 
   function closeAssignmentEditor() {
     setAssignmentProfile(null);
-    setAssignmentForm({ location: "", position: "" });
+    setAssignmentForm({ location: "", branch: "", position: "" });
     setSavingAssignment(false);
   }
+
+  useEffect(() => {
+    setAssignmentForm((current) => {
+      if (!assignmentProfile) return current;
+      if (assignmentBranchOptions.includes(current.branch)) return current;
+      return {
+        ...current,
+        branch: assignmentBranchOptions[0] || "",
+      };
+    });
+  }, [assignmentBranchOptions, assignmentProfile]);
 
   async function saveAssignment() {
     if (!assignmentProfile?.id) return;
 
     const payload = {
       location: assignmentForm.location.trim() || null,
+      branch: assignmentForm.branch.trim() || null,
       position: assignmentForm.position.trim() || null,
     };
 
@@ -329,7 +351,7 @@ export default function AdminUsersPage() {
 
   const locations = useMemo(() => {
     const uniqueLocations = Array.from(new Set(profiles.map((profile) => profile.location).filter(Boolean)));
-    return ["All", ...uniqueLocations];
+    return ["All", ...sortAreas(uniqueLocations)];
   }, [profiles]);
 
   const filteredProfiles = useMemo(() => {
@@ -338,7 +360,7 @@ export default function AdminUsersPage() {
     return profiles.filter((profile) => {
       const matchesRole = filters.role === "All" || profile.role === filters.role;
       const matchesLocation = filters.location === "All" || (profile.location || "Unassigned") === filters.location;
-      const haystack = [profile.full_name, profile.employee_id, profile.position, profile.location]
+      const haystack = [profile.full_name, profile.employee_id, profile.position, profile.location, profile.branch]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -349,42 +371,39 @@ export default function AdminUsersPage() {
   }, [filters, profiles]);
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading employee records...</p>;
+    return <p className="admin-loading-copy">Loading employee records...</p>;
   }
 
   return (
-    <div className="space-y-4">
+    <div className="admin-page admin-users-page">
       <Card>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="admin-section-head">
           <div>
-            <h2 className="text-lg font-semibold text-slate-800">Pending Profile Changes</h2>
-            <p className="text-sm text-slate-500">{profileRequests.length} request(s) waiting for approval</p>
+            <h2 className="admin-section-title">Pending Profile Changes</h2>
+            <p className="admin-section-copy">{profileRequests.length} request(s) waiting for approval</p>
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="admin-stack-sm">
           {profileRequests.map((request) => (
-            <div
-              key={request.id}
-              className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between"
-            >
-              <div className="flex items-start gap-3">
-                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-500">
+            <div key={request.id} className="admin-list-card admin-list-card--responsive admin-users-page__request-card">
+              <div className="admin-media-row">
+                <div className="app-avatar app-avatar--circle app-avatar--md admin-users-page__avatar">
                   {request.preview_url ? (
-                    <img src={request.preview_url} alt={request.requested_full_name || "Requested avatar"} className="h-full w-full object-cover" />
+                    <img src={request.preview_url} alt={request.requested_full_name || "Requested avatar"} className="app-media-cover" />
                   ) : (
                     <UserRound size={18} />
                   )}
                 </div>
                 <div>
-                  <p className="font-semibold text-slate-800">{request.profiles?.full_name || "Unknown Employee"}</p>
-                  <p className="text-sm text-slate-500">
+                  <p className="admin-text-strong">{request.profiles?.full_name || "Unknown Employee"}</p>
+                  <p className="admin-copy-sm">
                     {request.profiles?.employee_id || "No Employee ID"} | Requested name: {request.requested_full_name || "No change"}
                   </p>
-                  <p className="text-xs text-slate-400">{new Date(request.created_at).toLocaleString()}</p>
+                  <p className="admin-copy-xs-muted">{new Date(request.created_at).toLocaleString()}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="admin-users-page__actions">
                 <StatusBadge status={request.status} />
                 <Button variant="secondary" onClick={() => setReviewRequest(request)}>
                   Review
@@ -392,12 +411,12 @@ export default function AdminUsersPage() {
               </div>
             </div>
           ))}
-          {profileRequests.length === 0 ? <p className="text-sm text-slate-500">No pending profile update requests.</p> : null}
+          {profileRequests.length === 0 ? <p className="admin-copy-sm">No pending profile update requests.</p> : null}
         </div>
       </Card>
 
       <Card>
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="admin-filters-grid admin-filters-grid--directory">
           <Select label="Role" value={filters.role} onChange={(e) => setFilters((prev) => ({ ...prev, role: e.target.value }))}>
             <option>All</option>
             <option>employee</option>
@@ -412,13 +431,13 @@ export default function AdminUsersPage() {
               <option key={location}>{location}</option>
             ))}
           </Select>
-          <label className="block md:col-span-2">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">Search</span>
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+          <label className="admin-search-label admin-search-label--wide">
+            <span className="admin-search-label-text">Search</span>
+            <div className="admin-search-wrap">
+              <Search size={16} className="admin-search-icon" />
               <input
-                className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-brand-500"
-                placeholder="Name, employee ID, position, location"
+                className="admin-search-input"
+                placeholder="Name, employee ID, position, location, branch"
                 value={filters.q}
                 onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
               />
@@ -428,33 +447,33 @@ export default function AdminUsersPage() {
       </Card>
 
       <Card>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="admin-section-head">
           <div>
-            <h2 className="text-lg font-semibold text-slate-800">People Directory</h2>
-            <p className="text-sm text-slate-500">{filteredProfiles.length} matching profiles</p>
+            <h2 className="admin-section-title">People Directory</h2>
+            <p className="admin-section-copy">{filteredProfiles.length} matching profiles</p>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+        <div className="admin-table-wrap admin-users-page__table-wrap">
+          <table className="admin-table admin-users-page__table">
             <thead>
-              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="pb-3">User</th>
-                <th className="pb-3">Presence</th>
-                <th className="pb-3">Assignment</th>
-                <th className="pb-3">Government IDs</th>
-                <th className="pb-3">Documents</th>
-                <th className="pb-3">Role</th>
+              <tr className="admin-table-head-row admin-table-head-row--caps">
+                <th className="admin-table-head-cell admin-table-head-cell--lg">User</th>
+                <th className="admin-table-head-cell admin-table-head-cell--lg">Presence</th>
+                <th className="admin-table-head-cell admin-table-head-cell--lg">Assignment</th>
+                <th className="admin-table-head-cell admin-table-head-cell--lg">Government IDs</th>
+                <th className="admin-table-head-cell admin-table-head-cell--lg">Documents</th>
+                <th className="admin-table-head-cell admin-table-head-cell--lg">Role</th>
               </tr>
             </thead>
             <tbody>
               {filteredProfiles.map((profile) => (
-                <tr key={profile.id} className="border-b border-slate-100 align-top">
-                  <td className="py-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 text-slate-600">
+                <tr key={profile.id} className="admin-table-row admin-table-row--top">
+                  <td className="admin-table-cell admin-table-cell--lg">
+                    <div className="admin-users-page__user-main">
+                      <div className="app-avatar app-avatar--panel app-avatar--sm admin-users-page__avatar">
                         {profile.preview_url ? (
-                          <img src={profile.preview_url} alt={profile.full_name || "User"} className="h-full w-full object-cover" />
+                          <img src={profile.preview_url} alt={profile.full_name || "User"} className="app-media-cover" />
                         ) : profile.role === "admin" ? (
                           <ShieldCheck size={18} />
                         ) : (
@@ -462,46 +481,48 @@ export default function AdminUsersPage() {
                         )}
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-800">{profile.full_name || "Unnamed User"}</p>
-                        <p className="text-xs text-slate-500">{profile.employee_id || "No employee ID assigned"}</p>
-                        <p className="mt-1 text-xs text-slate-400">{profile.id}</p>
+                        <p className="admin-text-strong">{profile.full_name || "Unnamed User"}</p>
+                        <p className="admin-copy-xs">{profile.employee_id || "No employee ID assigned"}</p>
+                        <p className="admin-copy-xs-muted">{profile.id}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="py-4">
+                  <td className="admin-table-cell admin-table-cell--lg">
                     {profile.role === "employee" ? (
                       <PresenceBadge lastSeenAt={profile.last_seen_at} />
                     ) : (
-                      <p className="text-xs text-slate-400">Admin account</p>
+                      <p className="admin-copy-xs-muted">Admin account</p>
                     )}
                   </td>
-                  <td className="py-4">
-                    <p className="font-medium text-slate-700">{profile.position || "No position set"}</p>
-                    <p className="text-xs text-slate-500">{profile.location || "Unassigned location"}</p>
-                    <p className="text-xs text-slate-400">
+                  <td className="admin-table-cell admin-table-cell--lg">
+                    <p className="admin-text-medium">{profile.position || "No position set"}</p>
+                    <p className="admin-copy-xs">
+                      {profile.location || "Unassigned location"}{profile.branch ? ` / ${profile.branch}` : ""}
+                    </p>
+                    <p className="admin-copy-xs-muted">
                       Shift: {profile.shift || "Not set"} | Supervisor: {profile.supervisor || "Not set"}
                     </p>
                     <Button
                       variant="secondary"
-                      className="mt-3"
+                      className="admin-users-page__button-top"
                       onClick={() => openAssignmentEditor(profile)}
                     >
                       Edit Assignment
                     </Button>
                   </td>
-                  <td className="py-4 text-xs text-slate-500">
+                  <td className="admin-table-cell admin-table-cell--lg admin-copy-xs">
                     <p>SSS: {profile.sss || "-"}</p>
                     <p>PhilHealth: {profile.philhealth || "-"}</p>
                     <p>Pag-IBIG: {profile.pagibig || "-"}</p>
                     <p>TIN: {profile.tin || "-"}</p>
                   </td>
-                  <td className="py-4">
-                    <Button variant="secondary" className="w-full min-w-[150px]" onClick={() => openDocumentReview(profile)}>
+                  <td className="admin-table-cell admin-table-cell--lg">
+                    <Button variant="secondary" className="admin-users-page__button-wide" onClick={() => openDocumentReview(profile)}>
                       Review Files
                     </Button>
                   </td>
-                  <td className="py-4">
-                    <div className="flex max-w-[180px] flex-col gap-2">
+                  <td className="admin-table-cell admin-table-cell--lg">
+                    <div className="admin-users-page__role-controls">
                       <Select
                         value={profile.role}
                         onChange={(e) => updateRole(profile.id, e.target.value)}
@@ -512,7 +533,7 @@ export default function AdminUsersPage() {
                       </Select>
                       <Button
                         variant="secondary"
-                        className="w-full"
+                        className="admin-button-full"
                         loading={savingId === profile.id}
                         onClick={() => updateRole(profile.id, profile.role === "admin" ? "employee" : "admin")}
                       >
@@ -526,7 +547,7 @@ export default function AdminUsersPage() {
           </table>
         </div>
 
-        {filteredProfiles.length === 0 ? <p className="mt-4 text-sm text-slate-500">No profiles match the current filters.</p> : null}
+        {filteredProfiles.length === 0 ? <p className="admin-copy-sm">No profiles match the current filters.</p> : null}
       </Card>
 
       <Modal
@@ -535,11 +556,11 @@ export default function AdminUsersPage() {
         title={reviewProfile ? `${reviewProfile.full_name || "Employee"} Documents` : "Employee Documents"}
       >
         {documentsLoading ? (
-          <p className="text-sm text-slate-500">Loading uploaded files...</p>
+          <p className="admin-copy-sm">Loading uploaded files...</p>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-[260px,1fr]">
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-slate-700">Available Files</p>
+          <div className="admin-content-grid admin-content-grid--document-review">
+            <div className="admin-users-page__file-list">
+              <p className="admin-text-medium">Available Files</p>
               {documents.map((document) => {
                 const Icon = getDocumentIcon(document.file_url);
                 const selected = activeDocument?.id === document.id;
@@ -547,22 +568,22 @@ export default function AdminUsersPage() {
                 return (
                   <button
                     key={document.id}
-                    className={`w-full rounded-2xl border p-3 text-left transition ${
-                      selected ? "border-brand-500 bg-brand-50" : "border-slate-200 hover:bg-slate-50"
+                    className={`admin-users-page__file-button ${
+                      selected ? "admin-users-page__file-button--active" : ""
                     }`}
                     onClick={() => setActiveDocument(document)}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-xl bg-white p-2 text-slate-600 shadow-sm">
+                    <div className="admin-users-page__file-main">
+                      <div className="admin-users-page__file-icon">
                         <Icon size={18} />
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-semibold text-slate-800">{document.document_type}</p>
+                      <div className="admin-users-page__min-w-0">
+                        <div className="admin-row admin-row--gap">
+                          <p className="admin-users-page__truncate admin-text-strong">{document.document_type}</p>
                           <StatusBadge status={document.review_status} />
                         </div>
-                        <p className="truncate text-xs text-slate-500">{document.file_url}</p>
-                        <p className="mt-1 text-[11px] text-slate-400">
+                        <p className="admin-users-page__truncate admin-copy-xs">{document.file_url}</p>
+                        <p className="admin-copy-xs-muted">
                           {document.created_at ? new Date(document.created_at).toLocaleString() : "No timestamp"}
                         </p>
                       </div>
@@ -570,26 +591,21 @@ export default function AdminUsersPage() {
                   </button>
                 );
               })}
-              {documents.length === 0 ? <p className="text-sm text-slate-500">No uploaded files were found for this employee.</p> : null}
+              {documents.length === 0 ? <p className="admin-copy-sm">No uploaded files were found for this employee.</p> : null}
             </div>
 
-            <div className="space-y-3">
+            <div className="admin-stack-sm">
               {activeDocument?.preview_url ? (
                 <>
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="admin-row admin-row--between">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-800">{activeDocument.document_type}</p>
+                      <div className="admin-row admin-row--gap">
+                        <p className="admin-text-strong">{activeDocument.document_type}</p>
                         <StatusBadge status={activeDocument.review_status} />
                       </div>
-                      <p className="text-xs text-slate-500">{activeDocument.file_url}</p>
+                      <p className="admin-copy-xs">{activeDocument.file_url}</p>
                     </div>
-                    <a
-                      href={activeDocument.preview_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
+                    <a href={activeDocument.preview_url} target="_blank" rel="noreferrer" className="app-link-button">
                       <ExternalLink size={16} />
                       Open File
                     </a>
@@ -613,24 +629,24 @@ export default function AdminUsersPage() {
                     <iframe
                       title={activeDocument.document_type}
                       src={activeDocument.preview_url}
-                      className="h-[65vh] w-full rounded-2xl border border-slate-200"
+                      className="app-preview-frame admin-users-page__preview-frame"
                     />
                   ) : (
                     <img
                       src={activeDocument.preview_url}
                       alt={activeDocument.document_type}
-                      className="max-h-[65vh] w-full rounded-2xl border border-slate-200 object-contain"
+                      className="app-preview-image admin-users-page__preview-image"
                     />
                   )}
                 </>
               ) : (
-                <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dashed border-slate-300 text-sm text-slate-500">
+                <div className="app-empty-box app-empty-box--center">
                   Select a file to preview it here.
                 </div>
               )}
 
               {activeDocument?.is_missing ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                <div className="app-empty-box">
                   This required document has not been uploaded yet, so it is tagged as `Missing`.
                 </div>
               ) : null}
@@ -641,61 +657,56 @@ export default function AdminUsersPage() {
 
       <Modal open={Boolean(reviewRequest)} onClose={closeProfileRequestReview} title="Review Profile Change Request">
         {reviewRequest ? (
-          <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Profile</p>
-                <p className="mt-3 text-sm font-semibold text-slate-800">{reviewRequest.profiles?.full_name || "No current name"}</p>
-                <p className="text-xs text-slate-500">{reviewRequest.profiles?.employee_id || "No employee ID"}</p>
-                <p className="mt-1 text-xs text-slate-400">{reviewRequest.profiles?.location || "No location"}</p>
-                <p className="mt-3 text-xs text-slate-500">
+          <div className="app-modal-stack">
+            <div className="admin-panel-grid">
+              <div className="admin-card-panel">
+                <p className="admin-panel-title">Current Profile</p>
+                <p className="admin-text-strong admin-panel-copy">{reviewRequest.profiles?.full_name || "No current name"}</p>
+                <p className="admin-copy-xs">{reviewRequest.profiles?.employee_id || "No employee ID"}</p>
+                <p className="admin-copy-xs-muted">{reviewRequest.profiles?.location || "No location"}</p>
+                <p className="admin-copy-xs admin-panel-copy">
                   Birthday: {reviewRequest.profiles?.birthday || "Not set"} | Age: {reviewRequest.profiles?.age ?? "Not set"}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="admin-copy-xs">
                   Gender: {reviewRequest.profiles?.gender || "Not set"} | Civil Status: {reviewRequest.profiles?.civil_status || "Not set"}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="admin-copy-xs">
                   SSS: {reviewRequest.profiles?.sss || "-"} | PhilHealth: {reviewRequest.profiles?.philhealth || "-"}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="admin-copy-xs">
                   Pag-IBIG: {reviewRequest.profiles?.pagibig || "-"} | TIN: {reviewRequest.profiles?.tin || "-"}
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-brand-200 bg-brand-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Requested Update</p>
-                <p className="mt-3 text-sm font-semibold text-slate-800">{reviewRequest.requested_full_name || "No requested name"}</p>
-                <p className="text-xs text-slate-500">{new Date(reviewRequest.created_at).toLocaleString()}</p>
-                <p className="mt-3 text-xs text-slate-600">
+              <div className="admin-card-panel admin-card-panel--brand">
+                <p className="admin-panel-title admin-panel-title--brand">Requested Update</p>
+                <p className="admin-text-strong admin-panel-copy">{reviewRequest.requested_full_name || "No requested name"}</p>
+                <p className="admin-copy-xs">{new Date(reviewRequest.created_at).toLocaleString()}</p>
+                <p className="admin-copy-xs admin-panel-copy">
                   Birthday: {reviewRequest.requested_birthday || "Not set"} | Age: {reviewRequest.requested_age ?? "Not set"}
                 </p>
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="admin-copy-xs">
                   Gender: {reviewRequest.requested_gender || "Not set"} | Civil Status:{" "}
                   {reviewRequest.requested_civil_status || "Not set"}
                 </p>
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="admin-copy-xs">
                   SSS: {reviewRequest.requested_sss || "-"} | PhilHealth: {reviewRequest.requested_philhealth || "-"}
                 </p>
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="admin-copy-xs">
                   Pag-IBIG: {reviewRequest.requested_pagibig || "-"} | TIN: {reviewRequest.requested_tin || "-"}
                 </p>
                 <StatusBadge status={reviewRequest.status} />
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-3">
+            <div className="admin-stack-sm">
+              <div className="admin-row admin-row--between">
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">Requested Profile Picture</p>
-                  <p className="text-xs text-slate-500">Approve this to update the employee avatar on the live profile.</p>
+                  <p className="admin-text-strong">Requested Profile Picture</p>
+                  <p className="admin-copy-xs">Approve this to update the employee avatar on the live profile.</p>
                 </div>
                 {reviewRequest.preview_url ? (
-                  <a
-                    href={reviewRequest.preview_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
+                  <a href={reviewRequest.preview_url} target="_blank" rel="noreferrer" className="app-link-button">
                     <ExternalLink size={16} />
                     Open File
                   </a>
@@ -706,16 +717,16 @@ export default function AdminUsersPage() {
                 <img
                   src={reviewRequest.preview_url}
                   alt={reviewRequest.requested_full_name || "Requested profile picture"}
-                  className="max-h-[50vh] w-full rounded-2xl border border-slate-200 object-contain"
+                  className="app-preview-image admin-users-page__preview-image"
                 />
               ) : (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+                <div className="app-empty-box">
                   No profile picture was attached to this request.
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="app-modal-footer">
               <Button
                 variant="danger"
                 loading={savingRequestId === reviewRequest.id}
@@ -741,24 +752,51 @@ export default function AdminUsersPage() {
         onClose={closeAssignmentEditor}
         title={assignmentProfile ? `Edit Assignment for ${assignmentProfile.full_name || "Employee"}` : "Edit Assignment"}
       >
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+        <div className="app-modal-stack">
+          <div className="app-empty-box">
             Update the employee's assigned location and job description here. This saves directly to their live profile.
           </div>
 
-          <Input
+          <Select
             label="Assigned Location"
             value={assignmentForm.location}
             onChange={(e) => setAssignmentForm((current) => ({ ...current, location: e.target.value }))}
-          />
+          >
+            <option value="">Select area</option>
+            {AREA_OPTIONS.map((area) => (
+              <option key={area} value={area}>
+                {area}
+              </option>
+            ))}
+          </Select>
 
-          <Input
-            label="Job Description"
+          <Select
+            label="Branch"
+            value={assignmentForm.branch}
+            onChange={(e) => setAssignmentForm((current) => ({ ...current, branch: e.target.value }))}
+          >
+            {assignmentBranchOptions.length === 0 ? <option value="">No branches for this area</option> : null}
+            {assignmentBranchOptions.map((branch) => (
+              <option key={branch} value={branch}>
+                {branch}
+              </option>
+            ))}
+          </Select>
+
+          <Select
+            label="Position"
             value={assignmentForm.position}
             onChange={(e) => setAssignmentForm((current) => ({ ...current, position: e.target.value }))}
-          />
+          >
+            <option value="">Select position</option>
+            {POSITION_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </Select>
 
-          <div className="flex justify-end gap-2">
+          <div className="app-modal-footer">
             <Button variant="secondary" onClick={closeAssignmentEditor} disabled={savingAssignment}>
               Cancel
             </Button>

@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import Card from "../../components/ui/Card";
+import { sortAreas } from "../../lib/areas";
 import { supabase } from "../../lib/supabase";
+import "./AdminReportsPage.css";
 
 const statusColors = {
-  Approved: "bg-emerald-500",
-  "Pending Review": "bg-amber-500",
-  Rejected: "bg-rose-500",
+  Approved: "approved",
+  "Pending Review": "pending",
+  Rejected: "rejected",
 };
 
 export default function AdminReportsPage() {
@@ -58,9 +60,8 @@ export default function AdminReportsPage() {
       acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {});
-    return Object.entries(grouped)
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value)
+    return sortAreas(Object.keys(grouped))
+      .map((label) => ({ label, value: grouped[label] }))
       .slice(0, 6);
   }, [rows]);
 
@@ -82,38 +83,38 @@ export default function AdminReportsPage() {
   const maxDaily = Math.max(...dailyTrend.map((point) => point.value), 1);
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading report analytics...</p>;
+    return <p className="admin-loading-copy">Loading report analytics...</p>;
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="admin-page admin-reports-page">
+      <div className="admin-metrics-grid admin-metrics-grid--reports">
         <MetricCard label="Total Submissions" value={metrics.total} />
-        <MetricCard label="Approved" value={metrics.approved} tone="text-emerald-600" />
-        <MetricCard label="Pending Review" value={metrics.pending} tone="text-amber-600" />
-        <MetricCard label="Approval Rate" value={`${metrics.approvalRate}%`} tone="text-brand-600" />
+        <MetricCard label="Approved" value={metrics.approved} tone="emerald" />
+        <MetricCard label="Pending Review" value={metrics.pending} tone="amber" />
+        <MetricCard label="Approval Rate" value={`${metrics.approvalRate}%`} tone="brand" />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="admin-sections-grid admin-sections-grid--analytics">
         <Card>
-          <h3 className="mb-4 text-base font-semibold text-slate-800">Status Distribution</h3>
-          <div className="space-y-3">
+          <h3 className="admin-section-title admin-reports-page__section-title">Status Distribution</h3>
+          <div className="admin-stack-sm">
             {byStatus.map((item) => {
               const ratio = metrics.total ? Math.round((item.value / metrics.total) * 100) : 0;
               return (
                 <div key={item.label}>
-                  <div className="mb-1 flex items-center justify-between text-sm">
-                    <span className="text-slate-700">{item.label}</span>
-                    <span className="font-semibold text-slate-800">
+                  <div className="admin-stat-row">
+                    <span className="admin-stat-label">{item.label}</span>
+                    <span className="admin-stat-value">
                       {item.value} ({ratio}%)
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-slate-100">
+                  <div className="admin-stat-track">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${ratio}%` }}
                       transition={{ duration: 0.5 }}
-                      className={`h-2 rounded-full ${statusColors[item.label] || "bg-slate-500"}`}
+                      className={`admin-stat-fill admin-reports-page__bar--${statusColors[item.label] || "default"}`}
                     />
                   </div>
                 </div>
@@ -123,49 +124,49 @@ export default function AdminReportsPage() {
         </Card>
 
         <Card>
-          <h3 className="mb-4 text-base font-semibold text-slate-800">Top Locations</h3>
-          <div className="space-y-3">
+          <h3 className="admin-section-title admin-reports-page__section-title">Top Locations</h3>
+          <div className="admin-stack-sm">
             {byLocation.map((item, idx) => {
               const ratio = byLocation[0]?.value ? Math.round((item.value / byLocation[0].value) * 100) : 0;
               return (
                 <div key={item.label}>
-                  <div className="mb-1 flex items-center justify-between text-sm">
-                    <span className="text-slate-700">
+                  <div className="admin-stat-row">
+                    <span className="admin-stat-label">
                       {idx + 1}. {item.label}
                     </span>
-                    <span className="font-semibold">{item.value}</span>
+                    <span className="admin-stat-value">{item.value}</span>
                   </div>
-                  <div className="h-2 rounded-full bg-slate-100">
+                  <div className="admin-stat-track">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${ratio}%` }}
                       transition={{ duration: 0.5, delay: idx * 0.05 }}
-                      className="h-2 rounded-full bg-brand-500"
+                      className="admin-stat-fill admin-reports-page__bar--brand"
                     />
                   </div>
                 </div>
               );
             })}
-            {byLocation.length === 0 ? <p className="text-sm text-slate-500">No location data yet.</p> : null}
+            {byLocation.length === 0 ? <p className="admin-empty-copy admin-reports-page__empty">No location data yet.</p> : null}
           </div>
         </Card>
       </div>
 
       <Card>
-        <h3 className="mb-4 text-base font-semibold text-slate-800">Last 7 Days Submission Trend</h3>
-        <div className="grid grid-cols-7 gap-3">
+        <h3 className="admin-section-title admin-reports-page__section-title">Last 7 Days Submission Trend</h3>
+        <div className="admin-reports-page__trend-grid">
           {dailyTrend.map((point) => (
-            <div key={point.date} className="flex flex-col items-center gap-2">
-              <div className="flex h-40 w-full items-end rounded-lg bg-slate-50 p-2">
+            <div key={point.date} className="admin-reports-page__trend-day">
+              <div className="admin-reports-page__trend-frame">
                 <motion.div
                   initial={{ height: 0 }}
                   animate={{ height: `${Math.max((point.value / maxDaily) * 100, point.value ? 8 : 0)}%` }}
                   transition={{ duration: 0.45 }}
-                  className="w-full rounded-md bg-brand-500"
+                  className="admin-reports-page__trend-bar"
                 />
               </div>
-              <span className="text-[11px] text-slate-500">{point.date.slice(5)}</span>
-              <span className="text-xs font-semibold text-slate-700">{point.value}</span>
+              <span className="admin-reports-page__trend-date">{point.date.slice(5)}</span>
+              <span className="admin-reports-page__trend-value">{point.value}</span>
             </div>
           ))}
         </div>
@@ -174,11 +175,11 @@ export default function AdminReportsPage() {
   );
 }
 
-function MetricCard({ label, value, tone = "text-slate-800" }) {
+function MetricCard({ label, value, tone = "slate" }) {
   return (
     <Card>
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${tone}`}>{value}</p>
+      <p className="admin-metric-label">{label}</p>
+      <p className={`admin-metric-value admin-metric-value--md admin-reports-page__metric-value--${tone}`}>{value}</p>
     </Card>
   );
 }
