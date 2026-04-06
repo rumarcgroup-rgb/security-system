@@ -2,10 +2,11 @@
   position: relative;
   display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 1rem;
+  padding: clamp(0.75rem, 2vw, 1.25rem);
 }
 
 .login-page--default {
@@ -58,7 +59,7 @@
 .login-selector__hero {
   position: relative;
   overflow: hidden;
-  padding: 1.25rem 1.25rem 1.75rem;
+  padding: clamp(1rem, 2.8vw, 1.25rem) clamp(1rem, 2.8vw, 1.25rem) clamp(1.25rem, 3vw, 1.75rem);
   background-image: linear-gradient(180deg, rgba(13, 74, 180, 0.12) 0%, rgba(13, 74, 180, 0.66) 68%, rgba(10, 46, 106, 0.95) 100%), var(--login-hero-image);
   background-size: cover;
   background-position: center;
@@ -66,10 +67,9 @@
 
 .login-selector__copy {
   position: relative;
-  margin-top: 20rem;
+  margin-top: clamp(12rem, 42vw, 20rem);
   text-align: center;
   color: white;
-
 }
 
 .login-selector__badge {
@@ -149,10 +149,11 @@
 }
 
 .login-selector__card-title {
-  font-size: 2rem;
+  font-size: clamp(1.5rem, 5vw, 2rem);
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.03em;
+  word-break: break-word;
 }
 
 .login-selector__card-subtitle {
@@ -216,17 +217,17 @@
 }
 
 .login-page__hero--security {
-  padding: 1rem 1.25rem 2rem;
+  padding: clamp(0.9rem, 2.8vw, 1rem) clamp(1rem, 2.8vw, 1.25rem) clamp(1.25rem, 4vw, 2rem);
   background: linear-gradient(180deg, #0b4cac 0%, #0a3f94 38%, #f4f8ff 38.5%, #ffffff 100%);
 }
 
 .login-page__hero--janitor {
-  padding: 0.75rem 1rem;
+  padding: clamp(0.75rem, 2.5vw, 1rem);
   background: linear-gradient(180deg, #0f7b4d 0%, #0c6a3d 100%);
 }
 
 .login-page__hero--standard {
-  padding: 1rem 1.25rem 1.25rem;
+  padding: clamp(0.9rem, 2.8vw, 1rem) clamp(1rem, 2.8vw, 1.25rem) clamp(1rem, 3vw, 1.25rem);
   background: #143f92;
 }
 
@@ -352,8 +353,8 @@
   position: relative;
   margin: 0.5rem auto 0;
   display: flex;
-  height: 8rem;
-  width: 8rem;
+  height: clamp(6.25rem, 24vw, 8rem);
+  width: clamp(6.25rem, 24vw, 8rem);
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
@@ -365,8 +366,8 @@
 
 .login-page__hero-icon-core {
   display: flex;
-  height: 6rem;
-  width: 6rem;
+  height: clamp(4.5rem, 18vw, 6rem);
+  width: clamp(4.5rem, 18vw, 6rem);
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
@@ -385,7 +386,7 @@
 }
 
 .login-page__janitor-photo-inner {
-  height: 146px;
+  height: clamp(118px, 30vw, 146px);
   background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.02) 100%), var(--login-janitor-image);
   background-size: cover;
   background-repeat: no-repeat;
@@ -395,8 +396,8 @@
 .login-page__portal-icon-wrap {
   margin: 0 auto;
   display: flex;
-  height: 7rem;
-  width: 7rem;
+  height: clamp(5.75rem, 22vw, 7rem);
+  width: clamp(5.75rem, 22vw, 7rem);
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
@@ -407,15 +408,15 @@
 
 .login-page__portal-icon {
   display: flex;
-  height: 5rem;
-  width: 5rem;
+  height: clamp(4rem, 16vw, 5rem);
+  width: clamp(4rem, 16vw, 5rem);
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
 }
 
 .login-page__content {
-  padding: 1.25rem 1.25rem 1.5rem;
+  padding: clamp(1rem, 3vw, 1.25rem) clamp(1rem, 3vw, 1.25rem) clamp(1.25rem, 3.5vw, 1.5rem);
 }
 
 .login-page__content--standard {
@@ -431,10 +432,11 @@
 }
 
 .login-page__title {
-  font-size: 2rem;
+  font-size: clamp(1.6rem, 5.5vw, 2rem);
   font-weight: 900;
   letter-spacing: -0.03em;
   color: #1e293b;
+  line-height: 1.05;
 }
 
 .login-page__title--janitor {
@@ -569,6 +571,7 @@
 .login-page__auth-note {
   margin-top: 1.25rem;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.875rem;
@@ -586,4 +589,126 @@
 
 .login-page__admin-link:hover {
   text-decoration: underline;
+}
+
+@media (max-width: 767px) {
+  .login-page {
+    overflow-y: auto;
+    align-items: flex-start;
+  }
+
+  .login-page__shell--standard,
+  .login-selector {
+    max-width: 28rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .login-selector__card {
+    gap: 0.625rem;
+    border-radius: 22px;
+    padding: 0.875rem;
+  }
+
+  .login-selector__card-icon {
+    height: 3.25rem;
+    width: 3.25rem;
+  }
+
+  .login-selector__card-arrow {
+    height: 2.5rem;
+    width: 2.5rem;
+  }
+
+  .login-selector__footer {
+    padding: 0.9rem 1rem 1.1rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .login-page {
+    padding: 0.5rem;
+  }
+
+  .login-page__shell--standard,
+  .login-page__shell--compact,
+  .login-selector {
+    border-radius: 24px;
+  }
+
+  .login-selector__hero {
+    padding-inline: 0.875rem;
+  }
+
+  .login-selector__copy {
+    margin-top: clamp(10rem, 48vw, 13rem);
+  }
+
+  .login-selector__badge {
+    padding: 0.45rem 1rem;
+    font-size: 0.95rem;
+  }
+
+  .login-selector__subtitle {
+    font-size: 0.8rem;
+  }
+
+  .login-selector__card-subtitle {
+    font-size: 0.8rem;
+  }
+
+  .login-page__hero-top {
+    gap: 0.5rem;
+  }
+
+  .login-page__brand-chip {
+    padding: 0.25rem 0.625rem;
+    font-size: 0.8rem;
+  }
+
+  .login-page__brand-subtitle {
+    font-size: 0.7rem;
+  }
+
+  .login-page__content {
+    padding-inline: 0.875rem;
+  }
+
+  .login-page__submit {
+    padding: 0.7rem 0.9rem;
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-height: 740px) {
+  .login-page {
+    overflow-y: auto;
+    align-items: flex-start;
+  }
+
+  .login-selector__copy {
+    margin-top: clamp(9rem, 34vh, 13rem);
+  }
+
+  .login-page__hero-body {
+    margin-top: 0.75rem;
+  }
+
+  .login-page__content {
+    padding-top: 0.9rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .login-page {
+    padding: 1.5rem;
+  }
+
+  .login-selector {
+    max-width: 450px;
+  }
+
+  .login-page__shell--standard {
+    max-width: 450px;
+  }
 }
