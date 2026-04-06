@@ -8,6 +8,8 @@ import { saveEmployeePortalType } from "../../lib/employeePortal";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 import employeeCardBackground from "../../assets/front-page.jpg";
 import janitorLoginHalfbody from "../../assets/janitor.jpg";
+import securityGuardHalfBody from "../../assets/security-guard-half-body.png";
+import cgroupHeroLogo from "../../assets/employee-card-bg.jpg";
 import { getPortalConfig, portalConfigs, selectorItems } from "./portalConfig";
 import "./LoginPage.css";
 
@@ -136,47 +138,54 @@ export default function LoginPage() {
   const isSecurityPortal = portalType === "security-guard";
   const isJanitorPortal = portalType === "janitor";
   const isCGroupPortal = portalType === "cgroup-access";
-  const isCompactPortal = isJanitorPortal;
-  const portalHeroBackground = isSecurityPortal ? null : isJanitorPortal ? janitorLoginHalfbody : employeeCardBackground;
+  const isEmployeePhotoPortal = isCGroupPortal || isSecurityPortal || isJanitorPortal;
+  const portalHeroBackground = isJanitorPortal
+    ? janitorLoginHalfbody
+    : isSecurityPortal
+      ? securityGuardHalfBody
+      : isCGroupPortal
+        ? cgroupHeroLogo
+        : isEmployeePhotoPortal
+          ? employeeCardBackground
+          : null;
   const portalHeroOverlay = isSecurityPortal
-    ? "none"
+    ? "linear-gradient(180deg, rgba(7,52,126,0.22) 0%, rgba(12,73,184,0.48) 44%, rgba(8,52,125,0.74) 100%)"
     : isJanitorPortal
       ? "linear-gradient(180deg, rgba(8,104,58,0.18) 0%, rgba(9,109,62,0.62) 58%, rgba(8,70,43,0.88) 100%)"
       : isCGroupPortal
-        ? "linear-gradient(180deg, rgba(244,180,0,0.12) 0%, rgba(21,63,145,0.72) 70%, rgba(16,41,92,0.95) 100%)"
+        ? "radial-gradient(circle at center, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 55%)"
         : "linear-gradient(180deg, rgba(8,56,143,0.1) 0%, rgba(8,56,143,0.68) 72%, rgba(16,41,92,0.95) 100%)";
+  const portalHeroPosition = isJanitorPortal ? "center 12%" : isSecurityPortal ? "center top" : isCGroupPortal ? "center 68%" : "center";
+  const portalHeroSize = isCGroupPortal ? "72% auto" : "cover";
+  const portalHeroRepeat = isCGroupPortal ? "no-repeat" : "no-repeat";
 
   const pageClassName = `login-page ${isSecurityPortal ? "login-page--security" : "login-page--default"}`;
-  const shellClassName = `login-page__shell ${isCompactPortal ? "login-page__shell--compact" : "login-page__shell--standard"}`;
-  const heroClassName = `login-page__hero ${isSecurityPortal ? "login-page__hero--security" : isJanitorPortal ? "login-page__hero--janitor" : "login-page__hero--standard"
+  const shellClassName = `login-page__shell ${isEmployeePhotoPortal ? "login-page__shell--photo" : "login-page__shell--standard"}`;
+  const heroClassName = `login-page__hero ${isEmployeePhotoPortal ? "login-page__hero--photo" : isSecurityPortal ? "login-page__hero--security" : "login-page__hero--standard"
     }`;
-  const backLinkClassName = `login-page__back-link ${isSecurityPortal ? "login-page__back-link--security" : isJanitorPortal ? "login-page__back-link--janitor" : "login-page__back-link--standard"
+  const backLinkClassName = `login-page__back-link ${isEmployeePhotoPortal ? "login-page__back-link--photo" : isSecurityPortal ? "login-page__back-link--security" : "login-page__back-link--standard"
     }`;
   const brandChipClassName = `login-page__brand-chip ${isSecurityPortal
-    ? "login-page__brand-chip--security"
+    ? "login-page__brand-chip--photo"
     : isJanitorPortal
       ? "login-page__brand-chip--janitor"
       : isCGroupPortal
-        ? "login-page__brand-chip--cgroup"
+        ? "login-page__brand-chip--photo"
         : "login-page__brand-chip--standard"
     }`;
-  const brandSubtitleClassName = `login-page__brand-subtitle ${isSecurityPortal
-    ? "login-page__brand-subtitle--security"
-    : isJanitorPortal
-      ? "login-page__brand-subtitle--janitor"
-      : isCGroupPortal
-        ? "login-page__brand-subtitle--cgroup"
-        : "login-page__brand-subtitle--standard"
+  const brandSubtitleClassName = `login-page__brand-subtitle ${isEmployeePhotoPortal
+    ? "login-page__brand-subtitle--photo"
+    : "login-page__brand-subtitle--standard"
     }`;
-  const heroBodyClassName = `login-page__hero-body${!isSecurityPortal && !isJanitorPortal ? " login-page__hero-body--standard" : ""}`;
-  const contentClassName = `login-page__content ${isSecurityPortal ? "login-page__content--security" : isJanitorPortal ? "login-page__content--janitor" : "login-page__content--standard"
+  const heroBodyClassName = `login-page__hero-body${isEmployeePhotoPortal ? " login-page__hero-body--photo" : " login-page__hero-body--standard"}`;
+  const contentClassName = `login-page__content ${isEmployeePhotoPortal ? "login-page__content--photo" : isSecurityPortal ? "login-page__content--security" : "login-page__content--standard"
     }`;
-  const titleClassName = `login-page__title${isJanitorPortal ? " login-page__title--janitor" : ""}`;
-  const underlineClassName = `login-page__underline${isJanitorPortal ? " login-page__underline--janitor" : ""}`;
-  const formClassName = `login-page__form${isJanitorPortal ? " login-page__form--janitor" : ""}`;
-  const forgotLinkClassName = `login-page__link login-page__link--forgot${isJanitorPortal ? " login-page__link--janitor" : ""}`;
-  const accountLinkClassName = `login-page__link login-page__link--account${isJanitorPortal ? " login-page__link--janitor-account" : ""}`;
-  const authNoteIconClassName = isJanitorPortal ? "text-[#0c8b4d]" : "text-[#0d4dc4]";
+  const titleClassName = `login-page__title${isEmployeePhotoPortal ? " login-page__title--photo" : ""}`;
+  const underlineClassName = `login-page__underline${isEmployeePhotoPortal ? " login-page__underline--photo" : ""}`;
+  const formClassName = `login-page__form${isEmployeePhotoPortal ? " login-page__form--photo" : ""}`;
+  const forgotLinkClassName = `login-page__link login-page__link--forgot${isEmployeePhotoPortal ? " login-page__link--photo" : ""}`;
+  const accountLinkClassName = `login-page__link login-page__link--account${isEmployeePhotoPortal ? " login-page__link--photo-account" : ""}`;
+  const authNoteIconClassName = isJanitorPortal ? "text-[#0c8b4d]" : isCGroupPortal ? "text-[#153f91]" : "text-[#0d4dc4]";
 
   return (
     <div className={`app-auth-page ${pageClassName}`}>
@@ -187,7 +196,9 @@ export default function LoginPage() {
           style={{
             "--login-hero-image": portalHeroBackground ? `url('${portalHeroBackground}')` : "none",
             "--login-hero-overlay": portalHeroOverlay,
-            "--login-hero-position": isJanitorPortal ? "center 12%" : "center",
+            "--login-hero-position": portalHeroPosition,
+            "--login-hero-size": portalHeroSize,
+            "--login-hero-repeat": portalHeroRepeat,
             "--portal-accent-start": portal.theme.accentStart,
             "--portal-accent-end": portal.theme.accentEnd,
             "--portal-button-color": portal.theme.buttonColor,
@@ -209,28 +220,20 @@ export default function LoginPage() {
             </div>
             <div className="login-page__hero-spacer" />
           </div>
-
           <div className={heroBodyClassName}>
-            {isSecurityPortal ? (
+            {!isEmployeePhotoPortal && isSecurityPortal ? (
               <div className="login-page__hero-icon-wrap">
                 <div className="login-page__hero-icon-core">
                   <ShieldCheck size={42} />
                 </div>
               </div>
-            ) : isJanitorPortal ? (
-              <div className="login-page__janitor-photo">
-                <div
-                  className="login-page__janitor-photo-inner"
-                  style={{ "--login-janitor-image": `url('${janitorLoginHalfbody}')` }}
-                />
-              </div>
-            ) : (
+            ) : !isEmployeePhotoPortal ? (
               <div className="login-page__portal-icon-wrap">
                 <div className={`login-page__portal-icon ${portal.badgeClass}`}>
                   <PortalIcon size={isCGroupPortal ? 34 : 38} />
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
 

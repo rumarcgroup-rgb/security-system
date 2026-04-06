@@ -40,6 +40,11 @@
   border-radius: 34px;
 }
 
+.login-page__shell--photo {
+  max-width: 380px;
+  border-radius: 34px;
+}
+
 .login-page__shell--compact {
   max-width: 300px;
   border-radius: 34px;
@@ -226,6 +231,11 @@
   background: linear-gradient(180deg, #0f7b4d 0%, #0c6a3d 100%);
 }
 
+.login-page__hero--photo {
+  padding: clamp(0.85rem, 2.8vw, 1rem);
+  background: linear-gradient(180deg, #14438f 0%, #0d2f6c 100%);
+}
+
 .login-page__hero--standard {
   padding: clamp(0.9rem, 2.8vw, 1rem) clamp(1rem, 2.8vw, 1.25rem) clamp(1rem, 3vw, 1.25rem);
   background: #143f92;
@@ -236,8 +246,9 @@
   position: absolute;
   inset: 0;
   background-image: var(--login-hero-overlay), var(--login-hero-image);
-  background-size: cover;
+  background-size: var(--login-hero-size, cover);
   background-position: var(--login-hero-position, center);
+  background-repeat: var(--login-hero-repeat, no-repeat);
 }
 
 .login-page__hero-top {
@@ -271,6 +282,14 @@
   border-color: rgba(255, 255, 255, 0.15);
 }
 
+.login-page__back-link--photo {
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 24px rgba(4, 17, 50, 0.18);
+  backdrop-filter: blur(10px);
+}
+
 .login-page__back-link--standard {
   background: rgba(255, 255, 255, 0.1);
   color: white;
@@ -302,6 +321,10 @@
   color: white;
 }
 
+.login-page__brand-chip--photo {
+  color: white;
+}
+
 .login-page__brand-chip--cgroup {
   background: #fff4cc;
   color: #153f91;
@@ -327,6 +350,10 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
+.login-page__brand-subtitle--photo {
+  color: rgba(255, 255, 255, 0.92);
+}
+
 .login-page__brand-subtitle--standard {
   color: rgba(255, 255, 255, 0.8);
 }
@@ -347,6 +374,10 @@
   background: rgba(255, 255, 255, 0.12);
   padding: 1rem;
   backdrop-filter: blur(10px);
+}
+
+.login-page__hero-body--photo {
+  min-height: clamp(11.5rem, 38vw, 15.5rem);
 }
 
 .login-page__hero-icon-wrap {
@@ -380,14 +411,10 @@
   margin: 0 auto;
   overflow: hidden;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  background: white;
-  box-shadow: 0 16px 36px rgba(7, 38, 24, 0.18);
 }
 
 .login-page__janitor-photo-inner {
-  height: clamp(118px, 30vw, 146px);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.02) 100%), var(--login-janitor-image);
+  height: clamp(140px, 36vw, 185px);
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center 18%;
@@ -431,6 +458,10 @@
   padding-top: 0.75rem;
 }
 
+.login-page__content--photo {
+  padding-top: 0.95rem;
+}
+
 .login-page__title {
   font-size: clamp(1.6rem, 5.5vw, 2rem);
   font-weight: 900;
@@ -443,6 +474,12 @@
   text-align: center;
   font-size: 14px;
   color: #16603e;
+}
+
+.login-page__title--photo {
+  text-align: center;
+  font-size: 1.3rem;
+  color: color-mix(in srgb, var(--portal-accent-end) 65%, #0f2a26 35%);
 }
 
 .login-page__underline {
@@ -459,6 +496,12 @@
   width: 4rem;
 }
 
+.login-page__underline--photo {
+  margin-left: auto;
+  margin-right: auto;
+  width: 4rem;
+}
+
 .login-page__form {
   margin-top: 1.25rem;
   display: flex;
@@ -468,6 +511,10 @@
 
 .login-page__form--janitor {
   margin-top: 1rem;
+}
+
+.login-page__form--photo {
+  margin-top: 1.15rem;
 }
 
 .login-page__password-label {
@@ -564,6 +611,14 @@
   color: #16603e;
 }
 
+.login-page__link--photo {
+  color: color-mix(in srgb, var(--portal-accent-end) 72%, #0f172a 28%);
+}
+
+.login-page__link--photo-account {
+  color: #1f375d;
+}
+
 .login-page__link--janitor-account {
   color: #334155;
 }
@@ -597,9 +652,10 @@
     align-items: flex-start;
   }
 
+  .login-page__shell--photo,
   .login-page__shell--standard,
   .login-selector {
-    max-width: 28rem;
+    max-width: 24rem;
   }
 }
 
@@ -630,6 +686,7 @@
     padding: 0.5rem;
   }
 
+  .login-page__shell--photo,
   .login-page__shell--standard,
   .login-page__shell--compact,
   .login-selector {
@@ -674,6 +731,14 @@
     padding-inline: 0.875rem;
   }
 
+  .login-page__title--photo {
+    font-size: 1.15rem;
+  }
+
+  .login-page__janitor-photo-inner {
+    height: clamp(132px, 40vw, 165px);
+  }
+
   .login-page__submit {
     padding: 0.7rem 0.9rem;
     font-size: 0.95rem;
@@ -708,7 +773,8 @@
     max-width: 450px;
   }
 
+  .login-page__shell--photo,
   .login-page__shell--standard {
-    max-width: 450px;
+    max-width: 430px;
   }
 }
