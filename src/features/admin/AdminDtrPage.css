@@ -4,6 +4,131 @@
   gap: 1rem;
 }
 
+.admin-dtr-page__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.admin-dtr-page__summary-grid--branches {
+  margin-top: 0;
+}
+
+.admin-dtr-page__summary-card {
+  border: 1px solid #dbeafe;
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.admin-dtr-page__summary-card--branch {
+  border-color: #c7d2fe;
+  background: linear-gradient(180deg, #eef2ff 0%, #ffffff 100%);
+}
+
+.admin-dtr-page__summary-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.admin-dtr-page__quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.admin-dtr-page__quick-chip {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.admin-dtr-page__quick-chip:hover {
+  transform: translateY(-1px);
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.admin-dtr-page__quick-chip--active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.admin-dtr-page__summary-value {
+  margin-top: 0.3rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.admin-dtr-page__summary-copy {
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.admin-dtr-page__bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.85rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.admin-dtr-page__bulk-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #334155;
+}
+
+.admin-dtr-page__bulk-copy {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.admin-dtr-page__bulk-remarks {
+  flex: 1 1 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.admin-dtr-page__bulk-remarks-input {
+  min-height: 84px;
+}
+
+.admin-dtr-page__bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-left: auto;
+  align-self: flex-end;
+}
+
+.admin-dtr-page__bulk-actions > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 42px;
+  min-width: 148px;
+  justify-content: center;
+}
+
 .admin-dtr-page__group-title {
   margin-bottom: 0.75rem;
   font-size: 1rem;
@@ -32,6 +157,57 @@
   color: #2563eb;
 }
 
+.admin-dtr-page__employee-source {
+  font-size: 0.74rem;
+  color: #475569;
+}
+
+.admin-dtr-page__source-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  padding: 0.32rem 0.7rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.admin-dtr-page__source-badge--supervisor {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.admin-dtr-page__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-dtr-page__row-actions > button {
+  min-height: 42px;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.admin-dtr-page__stale {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.admin-dtr-page__stale--warning {
+  color: #d97706;
+}
+
+.admin-dtr-page__stale--danger {
+  color: #dc2626;
+}
+
 .admin-dtr-page__empty,
 .admin-dtr-page__helper {
   font-size: 0.875rem;
@@ -41,6 +217,10 @@
 .admin-dtr-page__summary {
   font-size: 0.875rem;
   color: #475569;
+}
+
+.admin-dtr-page__submit-note {
+  color: #1d4ed8;
 }
 
 .admin-dtr-page__modal-preview-image {
@@ -54,4 +234,32 @@
 
 .admin-dtr-page__remarks {
   display: block;
+}
+
+@media (max-width: 767px) {
+  .admin-dtr-page__bulk-remarks {
+    flex-basis: 100%;
+  }
+
+  .admin-dtr-page__bulk-actions {
+    margin-left: 0;
+    width: 100%;
+    align-self: stretch;
+  }
+
+  .admin-dtr-page__bulk-actions > * {
+    flex: 1 1 180px;
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-dtr-page__row-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-dtr-page__row-actions > button {
+    width: 100%;
+    min-width: 0;
+  }
 }

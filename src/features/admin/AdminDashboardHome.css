@@ -4,6 +4,34 @@
   gap: 1rem;
 }
 
+.admin-dashboard-home__quick-actions {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.admin-dashboard-home__quick-action {
+  display: block;
+  border-radius: 1rem;
+  border: 1px solid #dbeafe;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  padding: 1rem;
+  text-decoration: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.admin-dashboard-home__quick-action:hover {
+  transform: translateY(-1px);
+  border-color: #bfdbfe;
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.08);
+}
+
+.admin-dashboard-home__quick-action-title {
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 0.25rem;
+}
+
 .admin-dashboard-home__metric-value--amber,
 .admin-dashboard-home__metric-icon--amber {
   color: #d97706;
@@ -34,6 +62,11 @@
   color: #1e293b;
 }
 
+.admin-dashboard-home__metric-value--orange,
+.admin-dashboard-home__metric-icon--orange {
+  color: #ea580c;
+}
+
 .admin-dashboard-home__metric-icon-box {
   padding: 0.75rem;
   border-radius: 1rem;
@@ -58,6 +91,10 @@
 
 .admin-dashboard-home__metric-icon-box--slate {
   background: #f1f5f9;
+}
+
+.admin-dashboard-home__metric-icon-box--orange {
+  background: #fff7ed;
 }
 
 .admin-dashboard-home__section-title {
@@ -96,6 +133,10 @@
   margin-top: 1rem;
 }
 
+.admin-dashboard-home__distribution-panels {
+  align-items: start;
+}
+
 .admin-dashboard-home__distribution-item {
   display: flex;
   flex-direction: column;
@@ -132,7 +173,29 @@
   background: var(--brand-500, #3b82f6);
 }
 
+.admin-dashboard-home__distribution-fill--branch {
+  background: #0f766e;
+}
+
+@media (max-width: 767px) {
+  .admin-dashboard-home__quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-dashboard-home__activity-item {
+    align-items: flex-start;
+  }
+
+  .admin-dashboard-home__distribution-row {
+    gap: 0.5rem;
+  }
+}
+
 @media (min-width: 768px) {
+  .admin-dashboard-home__quick-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .admin-dashboard-home__activity-item {
     flex-direction: row;
     align-items: center;

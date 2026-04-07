@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, LayoutDashboard, FileClock, Users, FileBarChart2, Settings, LogOut } from "lucide-react";
+import { Bell, LayoutDashboard, FileClock, Files, Users, FileBarChart2, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import Modal from "../../components/ui/Modal";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -9,6 +9,7 @@ import "./AdminLayout.css";
 const items = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/dtr-submissions", label: "DTR Submissions", icon: FileClock },
+  { to: "/admin/requirements", label: "Requirements", icon: Files },
   { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/reports", label: "Reports", icon: FileBarChart2 },
   { to: "/admin/settings", label: "Settings", icon: Settings },
@@ -19,6 +20,8 @@ export default function AdminLayout({ profile }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [seenNotificationIds, setSeenNotificationIds] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     loadNotifications();
@@ -45,6 +48,27 @@ export default function AdminLayout({ profile }) {
     };
   }, []);
 
+  useEffect(() => {
+    function syncSidebarMode() {
+      if (window.innerWidth >= 768) {
+        setSidebarOpen(false);
+      }
+    }
+
+    function onKeyDown(event) {
+      if (event.key === "Escape") {
+        setSidebarOpen(false);
+      }
+    }
+
+    window.addEventListener("resize", syncSidebarMode);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("resize", syncSidebarMode);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
   async function loadNotifications() {
     const [dtrRes, documentsRes, profileRequestsRes] = await Promise.all([
       supabase
@@ -55,7 +79,7 @@ export default function AdminLayout({ profile }) {
       supabase
         .from("employee_documents")
         .select(
-          "id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_fkey(full_name,employee_id)"
+          "id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(full_name,employee_id)"
         )
         .order("created_at", { ascending: false })
         .limit(6),
@@ -92,8 +116,8 @@ export default function AdminLayout({ profile }) {
           subtitle: `${row.profiles?.employee_id || "No Employee ID"} | Waiting on requirement review`,
           createdAt: row.created_at,
           status: row.review_status || "Pending Review",
-          link: "/admin/users",
-          linkLabel: "Review user files",
+          link: "/admin/requirements",
+          linkLabel: "Review requirements",
         });
       });
     }
@@ -128,9 +152,21 @@ export default function AdminLayout({ profile }) {
     navigate("/login");
   }
 
+  function handleNavClick() {
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  }
+
   return (
-    <div className="admin-layout">
-      <aside className="admin-layout__sidebar">
+    <div className={`admin-layout${sidebarCollapsed ? " admin-layout--collapsed" : ""}`}>
+      <button
+        type="button"
+        className={`admin-layout__backdrop${sidebarOpen ? " admin-layout__backdrop--visible" : ""}`}
+        aria-label="Close sidebar"
+        onClick={() => setSidebarOpen(false)}
+      />
+      <aside className={`admin-layout__sidebar${sidebarOpen ? " admin-layout__sidebar--open" : ""}`}>
         <div className="admin-layout__sidebar-top">
           <p className="admin-layout__brand">CGROUP of COMPANIES Admin</p>
         </div>
@@ -140,6 +176,9 @@ export default function AdminLayout({ profile }) {
               key={to}
               to={to}
               end={end}
+              onClick={handleNavClick}
+              aria-label={label}
+              data-tooltip={sidebarCollapsed ? label : undefined}
               className={({ isActive }) =>
                 `admin-layout__nav-link${isActive ? " admin-layout__nav-link--active" : ""}`
               }
@@ -148,14 +187,35 @@ export default function AdminLayout({ profile }) {
             </NavLink>
           ))}
         </nav>
-        <button className="admin-layout__logout" onClick={logout}>
+        <button
+          className="admin-layout__logout"
+          onClick={logout}
+          aria-label="Logout"
+          data-tooltip={sidebarCollapsed ? "Logout" : undefined}
+        >
           <LogOut size={16} /> Logout
         </button>
       </aside>
 
       <div className="admin-layout__main">
         <header className="admin-layout__header">
-          <h1 className="admin-layout__title">Admin Dashboard</h1>
+          <div className="admin-layout__header-title">
+            <button
+              type="button"
+              className="admin-layout__sidebar-toggle"
+              onClick={() => {
+                if (window.innerWidth >= 768) {
+                  setSidebarCollapsed((current) => !current);
+                } else {
+                  setSidebarOpen(true);
+                }
+              }}
+              aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
+            <h1 className="admin-layout__title">Admin Dashboard</h1>
+          </div>
           <div className="admin-layout__header-actions">
             <button
               className="admin-layout__bell"

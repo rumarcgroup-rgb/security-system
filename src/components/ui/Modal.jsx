@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
+import { X } from "lucide-react";
 
-export default function Modal({ open, onClose, title, children }) {
+export default function Modal({ open, onClose, title, children, showCloseButton = true }) {
   return (
     <AnimatePresence>
       {open ? (
@@ -18,7 +19,16 @@ export default function Modal({ open, onClose, title, children }) {
             exit={{ scale: 0.96, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-4 text-lg font-semibold text-slate-800">{title}</h3>
+            {title || showCloseButton ? (
+              <div className="mb-4 flex items-center justify-between gap-3">
+                {title ? <h3 className="text-lg font-semibold text-slate-800">{title}</h3> : <div />}
+                {showCloseButton ? (
+                  <button type="button" aria-label="Close modal" className="app-icon-close" onClick={onClose}>
+                    <X size={18} />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {children}
           </motion.div>
         </motion.div>

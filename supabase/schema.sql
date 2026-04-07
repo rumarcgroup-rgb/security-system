@@ -96,6 +96,12 @@ alter table public.dtr_submissions
 alter table public.dtr_submissions
   add column if not exists admin_remarks text;
 
+alter table public.dtr_submissions
+  add column if not exists submitted_by_role text not null default 'employee';
+
+alter table public.dtr_submissions
+  add column if not exists submitted_by_user_id uuid references auth.users(id) on delete set null;
+
 alter table public.profile_change_requests
   add column if not exists requested_birthday date;
 
@@ -195,6 +201,16 @@ begin
       add constraint profile_change_requests_status_check
       check (status in ('Pending Review', 'Approved', 'Rejected'));
   end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'dtr_submissions_submitted_by_role_check'
+  ) then
+    alter table public.dtr_submissions
+      add constraint dtr_submissions_submitted_by_role_check
+      check (submitted_by_role in ('employee', 'supervisor'));
+  end if;
 end
 $$;
 
@@ -247,10 +263,92 @@ $$;
 revoke all on function public.is_admin(uuid) from public;
 grant execute on function public.is_admin(uuid) to authenticated, service_role;
 
+create or replace function public.is_supervisor(check_user_id uuid default auth.uid())
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if check_user_id is null then
+    return false;
+  end if;
+
+  return exists (
+    select 1
+    from public.profiles
+    where id = check_user_id
+      and role = 'supervisor'
+  );
+exception
+  when others then
+    return false;
+end;
+$$;
+
+revoke all on function public.is_supervisor(uuid) from public;
+grant execute on function public.is_supervisor(uuid) to authenticated, service_role;
+
+create or replace function public.is_supervisor_for_scope(
+  target_location text,
+  target_branch text default null,
+  check_user_id uuid default auth.uid()
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  supervisor_location text;
+  supervisor_branch text;
+begin
+  if check_user_id is null or target_location is null then
+    return false;
+  end if;
+
+  select
+    location,
+    nullif(trim(branch), '')
+  into
+    supervisor_location,
+    supervisor_branch
+  from public.profiles
+  where id = check_user_id
+    and role = 'supervisor';
+
+  if supervisor_location is null then
+    return false;
+  end if;
+
+  if supervisor_location <> target_location then
+    return false;
+  end if;
+
+  if supervisor_branch is null then
+    return true;
+  end if;
+
+  return supervisor_branch = nullif(trim(target_branch), '');
+exception
+  when others then
+    return false;
+end;
+$$;
+
+revoke all on function public.is_supervisor_for_scope(text, text, uuid) from public;
+grant execute on function public.is_supervisor_for_scope(text, text, uuid) to authenticated, service_role;
+
 drop policy if exists "users_can_select_own_profile" on public.profiles;
 create policy "users_can_select_own_profile"
 on public.profiles for select
-using (auth.uid() = id or public.is_admin(auth.uid()));
+using (
+  auth.uid() = id
+  or public.is_admin(auth.uid())
+  or public.is_supervisor_for_scope(location, branch, auth.uid())
+);
 
 drop policy if exists "users_can_upsert_own_profile" on public.profiles;
 create policy "users_can_upsert_own_profile"
@@ -261,20 +359,68 @@ with check (auth.uid() = id or public.is_admin(auth.uid()));
 drop policy if exists "users_can_manage_own_dtr" on public.dtr_submissions;
 create policy "users_can_manage_own_dtr"
 on public.dtr_submissions for all
-using (auth.uid() = user_id or public.is_admin(auth.uid()))
-with check (auth.uid() = user_id or public.is_admin(auth.uid()));
+using (
+  auth.uid() = user_id
+  or public.is_admin(auth.uid())
+  or public.is_supervisor_for_scope(
+    (select location from public.profiles where id = user_id),
+    (select branch from public.profiles where id = user_id),
+    auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  or public.is_admin(auth.uid())
+  or public.is_supervisor_for_scope(
+    (select location from public.profiles where id = user_id),
+    (select branch from public.profiles where id = user_id),
+    auth.uid()
+  )
+);
 
 drop policy if exists "users_can_manage_own_documents" on public.employee_documents;
 create policy "users_can_manage_own_documents"
 on public.employee_documents for all
-using (auth.uid() = user_id or public.is_admin(auth.uid()))
-with check (auth.uid() = user_id or public.is_admin(auth.uid()));
+using (
+  auth.uid() = user_id
+  or public.is_admin(auth.uid())
+  or public.is_supervisor_for_scope(
+    (select location from public.profiles where id = user_id),
+    (select branch from public.profiles where id = user_id),
+    auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  or public.is_admin(auth.uid())
+  or public.is_supervisor_for_scope(
+    (select location from public.profiles where id = user_id),
+    (select branch from public.profiles where id = user_id),
+    auth.uid()
+  )
+);
 
 drop policy if exists "users_can_manage_own_presence" on public.employee_presence;
 create policy "users_can_manage_own_presence"
 on public.employee_presence for all
-using (auth.uid() = user_id or public.is_admin(auth.uid()))
-with check (auth.uid() = user_id or public.is_admin(auth.uid()));
+using (
+  auth.uid() = user_id
+  or public.is_admin(auth.uid())
+  or public.is_supervisor_for_scope(
+    (select location from public.profiles where id = user_id),
+    (select branch from public.profiles where id = user_id),
+    auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  or public.is_admin(auth.uid())
+  or public.is_supervisor_for_scope(
+    (select location from public.profiles where id = user_id),
+    (select branch from public.profiles where id = user_id),
+    auth.uid()
+  )
+);
 
 drop policy if exists "users_can_manage_own_profile_change_requests" on public.profile_change_requests;
 create policy "users_can_manage_own_profile_change_requests"
@@ -312,6 +458,12 @@ using (
   and (
     (storage.foldername(name))[1] = auth.uid()::text
     or public.is_admin(auth.uid())
+    or exists (
+      select 1
+      from public.profiles
+      where id::text = (storage.foldername(name))[1]
+        and public.is_supervisor_for_scope(location, branch, auth.uid())
+    )
   )
 );
 
@@ -323,6 +475,12 @@ with check (
   and (
     (storage.foldername(name))[1] = auth.uid()::text
     or public.is_admin(auth.uid())
+    or exists (
+      select 1
+      from public.profiles
+      where id::text = (storage.foldername(name))[1]
+        and public.is_supervisor_for_scope(location, branch, auth.uid())
+    )
   )
 );
 
@@ -364,6 +522,12 @@ using (
   and (
     (storage.foldername(name))[1] = auth.uid()::text
     or public.is_admin(auth.uid())
+    or exists (
+      select 1
+      from public.profiles
+      where id::text = (storage.foldername(name))[1]
+        and public.is_supervisor_for_scope(location, branch, auth.uid())
+    )
   )
 );
 

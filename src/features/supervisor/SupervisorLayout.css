@@ -1,0 +1,154 @@
+@import "../admin/AdminLayout.css";
+
+.supervisor-layout__sidebar {
+  background: linear-gradient(180deg, #0f172a 0%, #14532d 100%);
+}
+
+.supervisor-layout {
+  --sidebar-tooltip-bg: #052e16;
+  --sidebar-tooltip-accent: #16a34a;
+}
+
+.supervisor-layout__brand {
+  background: #16a34a;
+}
+
+.supervisor-layout__scope-copy {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.supervisor-layout__mobile-nav {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.75rem 1rem 0;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.supervisor-layout__mobile-link {
+  display: inline-flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid #dbe7df;
+  border-radius: 999px;
+  background: #f8fafc;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #475569;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.supervisor-layout__mobile-link--active {
+  border-color: #16a34a;
+  background: #16a34a;
+  color: #fff;
+}
+
+.supervisor-dashboard-home .admin-dashboard-home__quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.supervisor-team-page .admin-table-wrap,
+.supervisor-dtr-page .admin-table-wrap {
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 1023px) {
+  .supervisor-layout__scope-copy {
+    max-width: 28rem;
+    line-height: 1.4;
+  }
+
+  .supervisor-dashboard-home .admin-sections-grid--analytics {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .supervisor-dashboard-home .admin-dashboard-home__quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .supervisor-dashboard-home .admin-dashboard-home__activity-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .supervisor-team-page .admin-filters-grid,
+  .supervisor-dtr-page .admin-filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .supervisor-team-page .admin-section-head,
+  .supervisor-dtr-page .admin-section-head,
+  .supervisor-dashboard-home .admin-section-head {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 639px) {
+  .supervisor-layout__mobile-nav {
+    padding: 0.65rem 0.75rem 0;
+  }
+
+  .supervisor-layout__mobile-link {
+    padding: 0.65rem 0.8rem;
+    font-size: 0.8125rem;
+  }
+
+  .supervisor-layout__mobile-link span {
+    max-width: 6.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .supervisor-dashboard-home .admin-metrics-grid--dashboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .supervisor-team-page .admin-table {
+    min-width: 640px;
+  }
+
+  .supervisor-dtr-page .admin-table {
+    min-width: 760px;
+  }
+
+  .supervisor-dtr-page__summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 479px) {
+  .supervisor-layout__mobile-nav {
+    gap: 0.4rem;
+  }
+
+  .supervisor-layout__mobile-link {
+    min-width: 7rem;
+  }
+
+  .supervisor-dashboard-home .admin-metrics-grid--dashboard,
+  .supervisor-dtr-page__summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .supervisor-layout__scope-copy {
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .supervisor-layout__mobile-nav {
+    display: none;
+  }
+}

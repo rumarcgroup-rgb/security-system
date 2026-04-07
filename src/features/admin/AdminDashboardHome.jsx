@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, CheckCircle2, Clock3, FileText, Users } from "lucide-react";
+import { Activity, CheckCircle2, Clock3, FileText, RefreshCcw, ShieldCheck, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { sortAreas } from "../../lib/areas";
+import { sortBranches } from "../../lib/branches";
 import { supabase } from "../../lib/supabase";
 import { isEmployeeOnline } from "../../lib/presence";
 import "./AdminDashboardHome.css";
@@ -11,10 +12,18 @@ import "./AdminDashboardHome.css";
 const metricCards = [
   { key: "pendingDtr", label: "Pending DTR", icon: Clock3, tone: "amber" },
   { key: "pendingRequirements", label: "Pending Requirements", icon: FileText, tone: "rose" },
+  { key: "pendingSignatures", label: "Pending Signatures", icon: ShieldCheck, tone: "brand" },
+  { key: "needsReupload", label: "Needs Reupload", icon: RefreshCcw, tone: "orange" },
   { key: "approvedToday", label: "Approved Today", icon: CheckCircle2, tone: "emerald" },
   { key: "activeEmployees", label: "Active Employees", icon: Users, tone: "brand" },
   { key: "onlineEmployees", label: "Online Now", icon: Activity, tone: "emerald-dark" },
   { key: "totalEmployeeSubmissions", label: "Total Employee Submissions", icon: Activity, tone: "slate" },
+];
+
+const quickActions = [
+  { to: "/admin/dtr-submissions", label: "Review DTR", copy: "Approve or reject employee DTR uploads." },
+  { to: "/admin/requirements", label: "Review Requirements", copy: "Check employee documents and signatures." },
+  { to: "/admin/users", label: "Manage Users", copy: "Assign areas, branches, and positions." },
 ];
 
 function getRequirementTypeLabel(row) {
@@ -66,19 +75,19 @@ export default function AdminDashboardHome() {
     const [recentDtrRes, allDtrRes, documentsRes, profilesRes, presenceRes] = await Promise.all([
       supabase
         .from("dtr_submissions")
-        .select("id,status,created_at,cutoff,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location)")
+        .select("id,status,created_at,cutoff,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location,branch)")
         .order("created_at", { ascending: false })
         .limit(8),
-      supabase.from("dtr_submissions").select("id,status,created_at").order("created_at", { ascending: false }),
+      supabase.from("dtr_submissions").select("id,status,created_at,approved_at").order("created_at", { ascending: false }),
       supabase
         .from("employee_documents")
         .select(
-          "id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_fkey(full_name,employee_id,location)"
+          "id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(full_name,employee_id,location,branch)"
         )
         .order("created_at", { ascending: false }),
       supabase
         .from("profiles")
-        .select("id,role,full_name,location,employee_id,created_at,signature_url,signature_status")
+        .select("id,role,full_name,location,branch,employee_id,created_at,signature_url,signature_status")
         .order("created_at", { ascending: false }),
       supabase.from("employee_presence").select("user_id,last_seen_at"),
     ]);
@@ -121,6 +130,7 @@ export default function AdminDashboardHome() {
             full_name: profile.full_name,
             employee_id: profile.employee_id,
             location: profile.location,
+            branch: profile.branch,
           },
           source: "profiles",
         }));
@@ -142,13 +152,19 @@ export default function AdminDashboardHome() {
     const onlineEmployees = profiles.filter((profile) => profile.role !== "admin" && isEmployeeOnline(profile.last_seen_at)).length;
     const pendingDtr = allDtrRows.filter((row) => row.status === "Pending Review").length;
     const approvedToday = allDtrRows.filter(
-      (row) => row.status === "Approved" && new Date(row.created_at).toISOString().slice(0, 10) === today
+      (row) => row.status === "Approved" && row.approved_at && new Date(row.approved_at).toISOString().slice(0, 10) === today
     ).length;
     const pendingRequirements = allRequirementRows.filter((row) => row.status === "Pending Review").length;
+    const pendingSignatures = allRequirementRows.filter(
+      (row) => row.requirement_type === "Signature" && row.status === "Pending Review"
+    ).length;
+    const needsReupload = allRequirementRows.filter((row) => row.status === "Needs Reupload").length;
 
     return {
       pendingDtr,
       pendingRequirements,
+      pendingSignatures,
+      needsReupload,
       approvedToday,
       activeEmployees,
       onlineEmployees,
@@ -169,12 +185,42 @@ export default function AdminDashboardHome() {
       .slice(0, 5);
   }, [profiles]);
 
+  const branchSummary = useMemo(() => {
+    const grouped = profiles.reduce((acc, profile) => {
+      if (profile.role === "admin") return acc;
+      const key = profile.branch || "Unassigned";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    return sortBranches(Object.keys(grouped))
+      .map((branch) => ({ branch, count: grouped[branch] }))
+      .slice(0, 5);
+  }, [profiles]);
+
   if (loading) {
     return <p className="admin-loading-copy">Loading dashboard metrics...</p>;
   }
 
   return (
     <div className="admin-page admin-dashboard-home">
+      <Card>
+        <div className="admin-section-head">
+          <div>
+            <h2 className="admin-section-title admin-dashboard-home__section-title">Quick Actions</h2>
+            <p className="admin-section-copy">Jump straight into the admin work that needs attention.</p>
+          </div>
+        </div>
+        <div className="admin-dashboard-home__quick-actions">
+          {quickActions.map((action) => (
+            <Link key={`${action.to}-${action.label}`} to={action.to} className="admin-dashboard-home__quick-action">
+              <p className="admin-dashboard-home__quick-action-title">{action.label}</p>
+              <p className="app-copy-sm">{action.copy}</p>
+            </Link>
+          ))}
+        </div>
+      </Card>
+
       <div className="admin-metrics-grid admin-metrics-grid--dashboard">
         {metricCards.map(({ key, label, icon: Icon, tone }) => (
           <Card key={key}>
@@ -212,6 +258,9 @@ export default function AdminDashboardHome() {
                   <p className="app-copy-sm">
                     {row.profiles?.employee_id || "No Employee ID"} | {row.cutoff}
                   </p>
+                  <p className="app-copy-xs-muted">
+                    {[row.profiles?.location, row.profiles?.branch].filter(Boolean).join(" / ") || "No assignment yet"}
+                  </p>
                   <p className="app-copy-xs-muted">{new Date(row.created_at).toLocaleString()}</p>
                 </div>
                 <StatusBadge status={row.status} />
@@ -236,6 +285,9 @@ export default function AdminDashboardHome() {
                   <p className="app-copy-sm">
                     {row.profiles?.employee_id || "No Employee ID"} | {getRequirementTypeLabel(row)}
                   </p>
+                  <p className="app-copy-xs-muted">
+                    {[row.profiles?.location, row.profiles?.branch].filter(Boolean).join(" / ") || "No assignment yet"}
+                  </p>
                   <p className="app-copy-xs-muted">{new Date(row.created_at).toLocaleString()}</p>
                 </div>
                 <StatusBadge status={row.status} />
@@ -246,31 +298,59 @@ export default function AdminDashboardHome() {
         </Card>
       </div>
 
-      <Card>
-        <h2 className="admin-section-title admin-dashboard-home__section-title">Employee Distribution</h2>
-        <p className="admin-section-copy app-copy-sm app-copy-xs-spaced admin-dashboard-home__distribution-copy">
-          Top assigned locations based on onboarding records.
-        </p>
-        <div className="admin-content-grid admin-content-grid--distribution admin-dashboard-home__distribution-grid">
-          {locationSummary.map((item, index) => (
-            <div key={item.location} className="admin-dashboard-home__distribution-item">
-              <div className="admin-dashboard-home__distribution-row">
-                <span className="admin-dashboard-home__distribution-label">
-                  {index + 1}. {item.location}
-                </span>
-                <span className="admin-dashboard-home__distribution-count">{item.count}</span>
+      <div className="admin-content-grid admin-content-grid--distribution admin-dashboard-home__distribution-panels">
+        <Card>
+          <h2 className="admin-section-title admin-dashboard-home__section-title">Employee Distribution</h2>
+          <p className="admin-section-copy app-copy-sm app-copy-xs-spaced admin-dashboard-home__distribution-copy">
+            Top assigned locations based on onboarding records.
+          </p>
+          <div className="admin-dashboard-home__distribution-grid">
+            {locationSummary.map((item, index) => (
+              <div key={item.location} className="admin-dashboard-home__distribution-item">
+                <div className="admin-dashboard-home__distribution-row">
+                  <span className="admin-dashboard-home__distribution-label">
+                    {index + 1}. {item.location}
+                  </span>
+                  <span className="admin-dashboard-home__distribution-count">{item.count}</span>
+                </div>
+                <div className="admin-dashboard-home__distribution-bar">
+                  <div
+                    className="admin-dashboard-home__distribution-fill"
+                    style={{ width: `${Math.max((item.count / locationSummary[0].count) * 100, 8)}%` }}
+                  />
+                </div>
               </div>
-              <div className="admin-dashboard-home__distribution-bar">
-                <div
-                  className="admin-dashboard-home__distribution-fill"
-                  style={{ width: `${Math.max((item.count / locationSummary[0].count) * 100, 8)}%` }}
-                />
+            ))}
+            {locationSummary.length === 0 ? <p className="admin-empty-copy">No employee location data available yet.</p> : null}
+          </div>
+        </Card>
+
+        <Card>
+          <h2 className="admin-section-title admin-dashboard-home__section-title">Branch Distribution</h2>
+          <p className="admin-section-copy app-copy-sm app-copy-xs-spaced admin-dashboard-home__distribution-copy">
+            Top branches based on assigned employee records.
+          </p>
+          <div className="admin-dashboard-home__distribution-grid">
+            {branchSummary.map((item, index) => (
+              <div key={item.branch} className="admin-dashboard-home__distribution-item">
+                <div className="admin-dashboard-home__distribution-row">
+                  <span className="admin-dashboard-home__distribution-label">
+                    {index + 1}. {item.branch}
+                  </span>
+                  <span className="admin-dashboard-home__distribution-count">{item.count}</span>
+                </div>
+                <div className="admin-dashboard-home__distribution-bar">
+                  <div
+                    className="admin-dashboard-home__distribution-fill admin-dashboard-home__distribution-fill--branch"
+                    style={{ width: `${Math.max((item.count / branchSummary[0].count) * 100, 8)}%` }}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
-          {locationSummary.length === 0 ? <p className="admin-empty-copy">No employee location data available yet.</p> : null}
-        </div>
-      </Card>
+            ))}
+            {branchSummary.length === 0 ? <p className="admin-empty-copy">No employee branch data available yet.</p> : null}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

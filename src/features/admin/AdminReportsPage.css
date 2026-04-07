@@ -84,3 +84,19 @@
 .admin-reports-page__metric-value--brand {
   color: var(--brand-600, #2563eb);
 }
+
+@media (max-width: 767px) {
+  .admin-reports-page__trend-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-reports-page__trend-frame {
+    height: 7rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-reports-page__trend-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

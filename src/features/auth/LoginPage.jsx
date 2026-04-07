@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Shield, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Shield, ShieldCheck, X } from "lucide-react";
 import Input from "../../components/ui/Input";
 import { clearStoredSupabaseAuth, isRetryableSessionError } from "../../lib/authSession";
 import { saveEmployeePortalType } from "../../lib/employeePortal";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
+import adminMatrixBackground from "../../assets/admin-matrix.gif";
+import adminBackground from "../../assets/adminBG.jpg";
 import employeeCardBackground from "../../assets/front-page.jpg";
 import janitorLoginHalfbody from "../../assets/janitor.jpg";
 import securityGuardHalfBody from "../../assets/security-guard-half-body.png";
@@ -20,9 +22,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
+  const [screenPopup, setScreenPopup] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const portal = useMemo(() => getPortalConfig(portalType), [portalType]);
+  const isAdminPortal = portalType === "admin";
+  const closeScreenPopup = () => {
+    setScreenPopup("");
+    navigate("/login", { replace: true });
+  };
 
   useEffect(() => {
     let active = true;
@@ -34,7 +42,7 @@ export default function LoginPage() {
       if (!active || error) return;
 
       if (data.session?.user) {
-        navigate("/", { replace: true });
+        navigate(isAdminPortal ? "/admin" : "/", { replace: true });
       }
     }
 
@@ -43,11 +51,12 @@ export default function LoginPage() {
     return () => {
       active = false;
     };
-  }, [navigate]);
+  }, [isAdminPortal, navigate]);
 
   async function onSubmit(e) {
     e.preventDefault();
     setFormError("");
+    setScreenPopup("");
 
     if (!isSupabaseConfigured) {
       const message = "Supabase environment variables are missing. Update your .env file first.";
@@ -59,14 +68,38 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const normalizedEmail = email.trim().toLowerCase();
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
       });
       if (error) throw error;
-      saveEmployeePortalType(portalType);
+
+      if (isAdminPortal) {
+        const signedInUser = data.user;
+        if (!signedInUser) {
+          throw new Error("Unable to verify admin access.");
+        }
+
+        const { data: adminProfile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", signedInUser.id)
+          .maybeSingle();
+
+        if (profileError) throw profileError;
+
+        if (adminProfile?.role !== "admin") {
+          await supabase.auth.signOut().catch(() => { });
+          setScreenPopup("You can't access this area.");
+          throw new Error("You can't access this area.");
+        }
+      }
+
+      if (!isAdminPortal) {
+        saveEmployeePortalType(portalType);
+      }
       toast.success("Welcome back!");
-      navigate("/", { replace: true });
+      navigate(isAdminPortal ? "/admin" : "/", { replace: true });
     } catch (err) {
       const message = err?.message || "Authentication failed";
 
@@ -153,11 +186,122 @@ export default function LoginPage() {
     : isJanitorPortal
       ? "linear-gradient(180deg, rgba(8,104,58,0.18) 0%, rgba(9,109,62,0.62) 58%, rgba(8,70,43,0.88) 100%)"
       : isCGroupPortal
-        ? "radial-gradient(circle at center, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 55%)"
+        ? "linear-gradient(180deg, rgba(7,52,126,0.16) 0%, rgba(12,73,184,0.22) 42%, rgba(8,52,125,0.46) 100%)"
         : "linear-gradient(180deg, rgba(8,56,143,0.1) 0%, rgba(8,56,143,0.68) 72%, rgba(16,41,92,0.95) 100%)";
-  const portalHeroPosition = isJanitorPortal ? "center 12%" : isSecurityPortal ? "center top" : isCGroupPortal ? "center 68%" : "center";
-  const portalHeroSize = isCGroupPortal ? "72% auto" : "cover";
+  const portalHeroPosition = isJanitorPortal ? "center 12%" : isSecurityPortal ? "center top" : isCGroupPortal ? "center center" : "center";
+  const portalHeroSize = "cover";
   const portalHeroRepeat = isCGroupPortal ? "no-repeat" : "no-repeat";
+
+  if (isAdminPortal) {
+    return (
+      <div
+        className="app-auth-page login-page login-page--admin"
+        style={{ "--login-admin-page-image": `url('${adminMatrixBackground}')` }}
+      >
+        <div className="app-auth-overlay login-page__backdrop" />
+        {screenPopup ? (
+          <div className="login-page__popup-backdrop" onClick={closeScreenPopup}>
+            <div
+              className="login-page__popup"
+              onClick={(e) => e.stopPropagation()}
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="admin-access-popup-title"
+            >
+              <button
+                type="button"
+                aria-label="Close popup"
+                className="login-page__popup-close"
+                onClick={closeScreenPopup}
+              >
+                <X size={18} />
+              </button>
+              <h2 id="admin-access-popup-title" className="login-page__popup-title">Access Denied</h2>
+              <p className="login-page__popup-copy">{screenPopup}</p>
+              <button
+                type="button"
+                className="login-page__popup-button"
+                onClick={closeScreenPopup}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        ) : null}
+        <div className="app-auth-card login-page__shell login-page__shell--admin">
+          <div
+            className="login-page__admin-hero"
+            style={{
+              "--login-admin-hero-image": `url('${adminBackground}')`,
+            }}
+          >
+            <div className="login-page__hero-top">
+              <Link to="/login" className="login-page__back-link login-page__back-link--photo">
+                <ArrowLeft size={18} />
+              </Link>
+              <div className="login-page__brand">
+                <div className="login-page__brand-chip login-page__brand-chip--photo">
+                  <Shield size={16} />
+                  CGROUP
+                </div>
+                <p className="login-page__brand-subtitle login-page__brand-subtitle--photo">{portal.subtitle}</p>
+              </div>
+              <div className="login-page__hero-spacer" />
+            </div>
+
+            <div className="login-page__admin-hero-panel">
+
+            </div>
+          </div>
+
+          <div className="login-page__admin-content">
+            <h1 className="login-page__admin-title">{portal.loginTitle}</h1>
+
+            <form className="login-page__form login-page__form--admin" onSubmit={onSubmit}>
+              <Input
+                label="Email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter Email Address"
+                className="rounded-2xl"
+              />
+              <Input
+                label="Password"
+                type="password"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter Password"
+                className="rounded-2xl"
+              />
+
+              {formError ? <div className="login-page__error">{formError}</div> : null}
+
+              <button className="login-page__submit login-page__submit--admin" disabled={loading} type="submit">
+                {loading ? "Signing in..." : "Login"}
+              </button>
+            </form>
+
+            <Link to="/reset-password/admin" className="login-page__link login-page__link--forgot login-page__link--admin">
+              Forgot Password?
+            </Link>
+
+            <Link className="login-page__link login-page__link--account login-page__link--admin-account" to="/onboarding">
+              Need an account? Start onboarding
+            </Link>
+
+            <div className="login-page__auth-note login-page__auth-note--admin">
+              <ShieldCheck size={16} className="text-[#1d4ed8]" />
+              Authorized Personnel Only
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const pageClassName = `login-page ${isSecurityPortal ? "login-page--security" : "login-page--default"}`;
   const shellClassName = `login-page__shell ${isEmployeePhotoPortal ? "login-page__shell--photo" : "login-page__shell--standard"}`;
@@ -303,15 +447,19 @@ export default function LoginPage() {
             Need an account? Start onboarding
           </Link>
 
-          <div className="login-page__auth-note">
-            <ShieldCheck size={16} className={authNoteIconClassName} />
-            Authorized Personnel Only
-          </div>
+          {!isEmployeePhotoPortal ? (
+            <>
+              <div className="login-page__auth-note">
+                <ShieldCheck size={16} className={authNoteIconClassName} />
+                Authorized Personnel Only
+              </div>
 
-          {portalType !== "admin" ? (
-            <Link to="/login/admin" className="login-page__admin-link">
-              Admin login
-            </Link>
+              {portalType !== "admin" ? (
+                <Link to="/login/admin" className="login-page__admin-link">
+                  Admin login
+                </Link>
+              ) : null}
+            </>
           ) : null}
         </div>
       </div>

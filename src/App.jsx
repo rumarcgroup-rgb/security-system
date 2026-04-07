@@ -11,9 +11,15 @@ const OnboardingPage = lazy(() => import("./features/onboarding/OnboardingPage")
 const AdminLayout = lazy(() => import("./features/admin/AdminLayout"));
 const AdminDashboardHome = lazy(() => import("./features/admin/AdminDashboardHome"));
 const AdminDtrPage = lazy(() => import("./features/admin/AdminDtrPage"));
+const AdminRequirementsPage = lazy(() => import("./features/admin/AdminRequirementsPage"));
 const AdminReportsPage = lazy(() => import("./features/admin/AdminReportsPage"));
 const AdminUsersPage = lazy(() => import("./features/admin/AdminUsersPage"));
 const AdminSettingsPage = lazy(() => import("./features/admin/AdminSettingsPage"));
+const SupervisorLayout = lazy(() => import("./features/supervisor/SupervisorLayout"));
+const SupervisorDashboardHome = lazy(() => import("./features/supervisor/SupervisorDashboardHome"));
+const SupervisorDtrPage = lazy(() => import("./features/supervisor/SupervisorDtrPage"));
+const SupervisorTeamPage = lazy(() => import("./features/supervisor/SupervisorTeamPage"));
+const SupervisorSettingsPage = lazy(() => import("./features/supervisor/SupervisorSettingsPage"));
 
 export default function App() {
   const { user, profile, loading, authError, refreshProfile, resetSession } = useAuth();
@@ -45,11 +51,26 @@ export default function App() {
             <Route path="/admin" element={<AdminLayout profile={profile} />}>
               <Route index element={<AdminDashboardHome />} />
               <Route path="dtr-submissions" element={<AdminDtrPage />} />
+              <Route path="requirements" element={<AdminRequirementsPage />} />
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="reports" element={<AdminReportsPage />} />
               <Route
                 path="settings"
                 element={<AdminSettingsPage profile={profile} refreshProfile={refreshProfile} />}
+              />
+            </Route>
+          </Route>
+
+          <Route
+            element={<RoleRoute allowedRole="supervisor" profile={profile} fallback="/" />}
+          >
+            <Route path="/supervisor" element={<SupervisorLayout profile={profile} />}>
+              <Route index element={<SupervisorDashboardHome profile={profile} />} />
+              <Route path="dtr" element={<SupervisorDtrPage profile={profile} />} />
+              <Route path="team" element={<SupervisorTeamPage profile={profile} />} />
+              <Route
+                path="settings"
+                element={<SupervisorSettingsPage profile={profile} refreshProfile={refreshProfile} />}
               />
             </Route>
           </Route>
@@ -61,6 +82,8 @@ export default function App() {
                 <Navigate to="/onboarding" replace />
               ) : profile.role === "admin" ? (
                 <Navigate to="/admin" replace />
+              ) : profile.role === "supervisor" ? (
+                <Navigate to="/supervisor" replace />
               ) : (
                 <EmployeeDashboard user={user} profile={profile} refreshProfile={refreshProfile} />
               )

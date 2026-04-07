@@ -15,6 +15,22 @@
   gap: 0.75rem;
 }
 
+.admin-users-page__request-card--history {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.admin-users-page__request-card--approved {
+  border-color: #bbf7d0;
+  border-left: 4px solid #22c55e;
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+}
+
+.admin-users-page__request-card--rejected {
+  border-color: #fecaca;
+  border-left: 4px solid #ef4444;
+  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+}
+
 @media (min-width: 768px) {
   .admin-users-page__request-card {
     gap: 1rem;
@@ -25,10 +41,19 @@
   color: #64748b;
 }
 
+.admin-users-page__request-main {
+  flex: 1;
+}
+
 .admin-users-page__actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.admin-users-page__actions--history {
+  justify-content: flex-end;
 }
 
 .admin-users-page__user-main {
@@ -51,6 +76,11 @@
 .admin-users-page__button-wide {
   min-width: 150px;
   width: 100%;
+}
+
+.admin-users-page__button-wide-link {
+  min-width: 150px;
+  justify-content: center;
 }
 
 .admin-users-page__file-list {
@@ -107,4 +137,24 @@
 
 .admin-users-page__preview-image {
   max-height: 65vh;
+}
+
+@media (max-width: 767px) {
+  .admin-users-page__actions {
+    width: 100%;
+  }
+
+  .admin-users-page__actions > * {
+    flex: 1 1 180px;
+  }
+
+  .admin-users-page__role-controls {
+    max-width: none;
+  }
+
+  .admin-users-page__button-wide-link,
+  .admin-users-page__button-wide {
+    width: 100%;
+    min-width: 0;
+  }
 }

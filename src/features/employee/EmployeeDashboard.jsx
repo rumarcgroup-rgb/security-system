@@ -21,6 +21,8 @@ import {
   MapPin,
   X,
   BriefcaseBusiness,
+  Search,
+  ChevronDown,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion } from "framer-motion";
@@ -200,11 +202,17 @@ function canEditDocument(document) {
 export default function EmployeeDashboard({ user, profile, refreshProfile }) {
   const navigate = useNavigate();
   const signatureCanvasRef = useRef(null);
+  const cutoffPickerRef = useRef(null);
+  const cutoffSearchInputRef = useRef(null);
+  const cutoffOptionRefs = useRef([]);
   const cutoffOptions = useMemo(() => buildCutoffOptions(new Date(), 48), []);
   const [cutoff, setCutoff] = useState(() => cutoffOptions[0]);
   const [file, setFile] = useState(null);
   const [employeeNote, setEmployeeNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [cutoffPickerOpen, setCutoffPickerOpen] = useState(false);
+  const [cutoffSearch, setCutoffSearch] = useState("");
+  const [activeCutoffIndex, setActiveCutoffIndex] = useState(0);
   const [submissions, setSubmissions] = useState([]);
   const [profileRow, setProfileRow] = useState(profile);
   const [profileChangeRequest, setProfileChangeRequest] = useState(null);
@@ -462,6 +470,8 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         employee_note: employeeNote.trim() || null,
         file_url: path,
         status: "Pending Review",
+        submitted_by_role: "employee",
+        submitted_by_user_id: user.id,
         approved_at: null,
       });
       if (insertError) throw insertError;
@@ -892,6 +902,85 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
     return notifications.filter((notification) => !seenNotificationIds.includes(notification.id)).length;
   }, [notifications, seenNotificationIds]);
 
+  const orderedCutoffOptions = useMemo(() => [...cutoffOptions].reverse(), [cutoffOptions]);
+
+  const filteredCutoffOptions = useMemo(() => {
+    const query = cutoffSearch.trim().toLowerCase();
+    if (!query) return orderedCutoffOptions;
+    return orderedCutoffOptions.filter((item) => item.toLowerCase().includes(query));
+  }, [orderedCutoffOptions, cutoffSearch]);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (cutoffPickerRef.current && !cutoffPickerRef.current.contains(event.target)) {
+        setCutoffPickerOpen(false);
+      }
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        setCutoffPickerOpen(false);
+      }
+    }
+
+    if (cutoffPickerOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [cutoffPickerOpen]);
+
+  useEffect(() => {
+    if (cutoffPickerOpen) {
+      window.setTimeout(() => {
+        cutoffSearchInputRef.current?.focus();
+      }, 0);
+    } else {
+      setCutoffSearch("");
+    }
+  }, [cutoffPickerOpen]);
+
+  useEffect(() => {
+    const selectedIndex = filteredCutoffOptions.findIndex((item) => item === cutoff);
+    setActiveCutoffIndex(selectedIndex >= 0 ? selectedIndex : 0);
+  }, [cutoff, filteredCutoffOptions]);
+
+  useEffect(() => {
+    const activeButton = cutoffOptionRefs.current[activeCutoffIndex];
+    if (cutoffPickerOpen && activeButton) {
+      activeButton.scrollIntoView({ block: "nearest" });
+    }
+  }, [activeCutoffIndex, cutoffPickerOpen]);
+
+  function handleCutoffSearchKeyDown(event) {
+    if (!filteredCutoffOptions.length) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveCutoffIndex((current) => (current + 1) % filteredCutoffOptions.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveCutoffIndex((current) => (current - 1 + filteredCutoffOptions.length) % filteredCutoffOptions.length);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const nextValue = filteredCutoffOptions[activeCutoffIndex];
+      if (nextValue) {
+        setCutoff(nextValue);
+        setCutoffPickerOpen(false);
+      }
+    }
+  }
+
   const messages = useMemo(() => {
     const items = [
       {
@@ -960,17 +1049,6 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
       </header>
 
       <main className="employee-dashboard__content employee-dashboard__stack-lg">
-        <Card className="employee-dashboard__hero-card">
-          <div className="employee-dashboard__hero-icon">
-            <DashboardIcon size={24} />
-          </div>
-          <div className="employee-dashboard__hero-copy-block">
-            <p className="employee-dashboard__hero-kicker">{dashboardVariant.title}</p>
-            <h2 className="employee-dashboard__hero-title">{dashboardVariant.heroTitle}</h2>
-            <p className="employee-dashboard__hero-copy">{dashboardVariant.heroCopy}</p>
-          </div>
-        </Card>
-
         <h2 className="employee-dashboard__section-title">My Profile</h2>
         <Card className="employee-dashboard__profile-card">
           <div className="employee-dashboard__profile-header">
@@ -1057,11 +1135,63 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             <div className="employee-card-panel employee-card-panel--warning employee-dashboard__info-banner">
               {dashboardVariant.submitCopy}
             </div>
-            <Select value={cutoff} onChange={(e) => setCutoff(e.target.value)}>
-              {cutoffOptions.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </Select>
+            <div className="employee-dashboard__cutoff-picker" ref={cutoffPickerRef}>
+              <span className="app-field-label">Select Cutoff Date</span>
+              <button
+                type="button"
+                className={`employee-dashboard__cutoff-trigger${cutoffPickerOpen ? " employee-dashboard__cutoff-trigger--open" : ""}`}
+                onClick={() => setCutoffPickerOpen((value) => !value)}
+              >
+                <span>{cutoff}</span>
+                <ChevronDown size={18} className={`employee-dashboard__cutoff-chevron${cutoffPickerOpen ? " employee-dashboard__cutoff-chevron--open" : ""}`} />
+              </button>
+
+              {cutoffPickerOpen ? (
+                <div className="employee-dashboard__cutoff-menu">
+                  <div className="employee-dashboard__cutoff-search">
+                    <Search size={16} className="employee-dashboard__cutoff-search-icon" />
+                    <input
+                      ref={cutoffSearchInputRef}
+                      type="text"
+                      className="employee-dashboard__cutoff-search-input"
+                      placeholder="Search cutoff or date"
+                      value={cutoffSearch}
+                      onChange={(e) => setCutoffSearch(e.target.value)}
+                      onKeyDown={handleCutoffSearchKeyDown}
+                    />
+                  </div>
+
+                  <div className="employee-dashboard__cutoff-options">
+                    {filteredCutoffOptions.map((item, index) => {
+                      const isRecent = !cutoffSearch.trim() && index < 3;
+
+                      return (
+                        <button
+                          key={item}
+                          ref={(element) => {
+                            cutoffOptionRefs.current[index] = element;
+                          }}
+                          type="button"
+                          className={`employee-dashboard__cutoff-option${cutoff === item ? " employee-dashboard__cutoff-option--active" : ""}${activeCutoffIndex === index ? " employee-dashboard__cutoff-option--highlighted" : ""}`}
+                          onClick={() => {
+                            setCutoff(item);
+                            setCutoffPickerOpen(false);
+                            setCutoffSearch("");
+                          }}
+                          onMouseEnter={() => setActiveCutoffIndex(index)}
+                        >
+                          <span>{item}</span>
+                          {isRecent ? <span className="employee-dashboard__cutoff-recent">Recent</span> : null}
+                        </button>
+                      );
+                    })}
+                    {filteredCutoffOptions.length === 0 ? (
+                      <p className="employee-dashboard__cutoff-empty">No cutoff dates match your search.</p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <label className="app-field-block employee-dashboard__textarea-label">
               <span className="app-field-label">Note for Admin</span>
               <textarea
@@ -1327,14 +1457,14 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         ) : null}
       </Modal>
 
-      <Modal open={moreOpen} onClose={() => setMoreOpen(false)}>
+      <Modal open={moreOpen} onClose={() => setMoreOpen(false)} showCloseButton={false}>
         <div className="app-modal-stack">
           <div className="employee-dashboard__modal-header">
             <p className="app-text-strong-md">More Actions</p>
             <button
               type="button"
               aria-label="Close message"
-              className="notification-modal-close"
+              className="app-icon-close"
               onClick={() => setMoreOpen(false)}
             >
               <X size={18} />
@@ -1492,13 +1622,13 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         </div>
       </Modal>
 
-      <Modal open={notificationsOpen} onClose={() => setNotificationsOpen(false)}>
+      <Modal open={notificationsOpen} onClose={() => setNotificationsOpen(false)} showCloseButton={false}>
         <div className="employee-dashboard__modal-header">
           <p className="app-text-strong-md">Notifications</p>
           <button
             type="button"
             aria-label="Close notification"
-            className="notification-modal-close"
+            className="app-icon-close"
             onClick={() => setNotificationsOpen(false)}
           >
             <X size={18} />
@@ -1517,13 +1647,13 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         </div>
       </Modal>
 
-      <Modal open={messagesOpen} onClose={() => setMessagesOpen(false)} >
+      <Modal open={messagesOpen} onClose={() => setMessagesOpen(false)} showCloseButton={false}>
         <div className="employee-dashboard__modal-header">
           <p className="app-text-strong-md">Messages</p>
           <button
             type="button"
             aria-label="Close message"
-            className="notification-modal-close"
+            className="app-icon-close"
             onClick={() => setMessagesOpen(false)}
           >
             <X size={18} />
@@ -1543,13 +1673,13 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         </div>
       </Modal>
 
-      <Modal open={editProfileOpen} onClose={() => setEditProfileOpen(false)} >
+      <Modal open={editProfileOpen} onClose={() => setEditProfileOpen(false)} showCloseButton={false}>
         <div className="employee-dashboard__modal-header">
           <p className="app-text-strong-md">Request Profile Update</p>
           <button
             type="button"
             aria-label="Close profile update"
-            className="notification-modal-close"
+            className="app-icon-close"
             onClick={() => setEditProfileOpen(false)}
           >
             <X size={18} />
