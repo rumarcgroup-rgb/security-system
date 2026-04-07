@@ -335,7 +335,9 @@
       color-mix(in srgb, var(--sidebar-tooltip-bg) 94%, var(--sidebar-tooltip-accent) 6%),
       var(--sidebar-tooltip-bg)
     );
-    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+    box-shadow:
+      0 12px 24px rgba(15, 23, 42, 0.18),
+      inset 0.18rem 0 0 color-mix(in srgb, var(--sidebar-tooltip-accent) 35%, transparent);
     font-size: 0.8rem;
     font-weight: 600;
     line-height: 1;
@@ -376,6 +378,25 @@
   .admin-layout--collapsed .admin-layout__logout[data-tooltip]:hover::before,
   .admin-layout--collapsed .admin-layout__logout[data-tooltip]:focus-visible::before {
     opacity: 1;
+  }
+
+  .admin-layout--collapsed .admin-layout__nav-link--active[data-tooltip]::after {
+    border-color: color-mix(in srgb, var(--sidebar-tooltip-accent) 65%, #ffffff 0%);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--sidebar-tooltip-bg) 82%, var(--sidebar-tooltip-accent) 18%),
+      color-mix(in srgb, var(--sidebar-tooltip-bg) 92%, var(--sidebar-tooltip-accent) 8%)
+    );
+    box-shadow:
+      0 14px 28px rgba(15, 23, 42, 0.24),
+      0 0 0 1px color-mix(in srgb, var(--sidebar-tooltip-accent) 24%, transparent),
+      inset 0.24rem 0 0 var(--sidebar-tooltip-accent);
+  }
+
+  .admin-layout--collapsed .admin-layout__nav-link--active[data-tooltip]::before {
+    border-top-color: color-mix(in srgb, var(--sidebar-tooltip-accent) 65%, #ffffff 0%);
+    border-right-color: color-mix(in srgb, var(--sidebar-tooltip-accent) 65%, #ffffff 0%);
+    background: color-mix(in srgb, var(--sidebar-tooltip-bg) 88%, var(--sidebar-tooltip-accent) 12%);
   }
 
   .admin-layout--collapsed .admin-layout__main {
