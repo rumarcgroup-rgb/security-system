@@ -1,6 +1,6 @@
 import { FileClock, LayoutDashboard, LogOut, Settings, Users, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import "./SupervisorLayout.css";
 
@@ -12,6 +12,7 @@ const items = [
 ];
 
 export default function SupervisorLayout({ profile }) {
+  const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -48,6 +49,26 @@ export default function SupervisorLayout({ profile }) {
     }
   }
 
+  function isItemActive({ to, end }) {
+    return Boolean(
+      matchPath(
+        {
+          path: to,
+          end: Boolean(end),
+        },
+        location.pathname
+      )
+    );
+  }
+
+  function getTooltipLabel(item) {
+    if (!sidebarCollapsed) {
+      return undefined;
+    }
+
+    return isItemActive(item) ? `Current page: ${item.label}` : item.label;
+  }
+
   return (
     <div className={`admin-layout supervisor-layout${sidebarCollapsed ? " admin-layout--collapsed" : ""}`}>
       <button
@@ -68,7 +89,7 @@ export default function SupervisorLayout({ profile }) {
               end={end}
               onClick={handleNavClick}
               aria-label={label}
-              data-tooltip={sidebarCollapsed ? label : undefined}
+              data-tooltip={getTooltipLabel({ to, label, end })}
               className={({ isActive }) =>
                 `admin-layout__nav-link${isActive ? " admin-layout__nav-link--active" : ""}`
               }

@@ -20,6 +20,7 @@ const SupervisorDashboardHome = lazy(() => import("./features/supervisor/Supervi
 const SupervisorDtrPage = lazy(() => import("./features/supervisor/SupervisorDtrPage"));
 const SupervisorTeamPage = lazy(() => import("./features/supervisor/SupervisorTeamPage"));
 const SupervisorSettingsPage = lazy(() => import("./features/supervisor/SupervisorSettingsPage"));
+const CebuanaUploadPreviewPage = lazy(() => import("./features/showcase/CebuanaUploadPreviewPage"));
 
 export default function App() {
   const { user, profile, loading, authError, refreshProfile, resetSession } = useAuth();
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/:portalType" element={<LoginPage />} />
         <Route path="/reset-password/:portalType" element={<ResetPasswordPage />} />
+        <Route path="/cebuana-preview" element={<CebuanaUploadPreviewPage profile={profile} />} />
         <Route
           path="/onboarding"
           element={<OnboardingPage user={user} profile={profile} refreshProfile={refreshProfile} />}
@@ -44,12 +46,11 @@ export default function App() {
             />
           }
         >
-
           <Route
             element={<RoleRoute allowedRole="admin" profile={profile} fallback="/" />}
           >
             <Route path="/admin" element={<AdminLayout profile={profile} />}>
-              <Route index element={<AdminDashboardHome />} />
+              <Route index element={<AdminDashboardHome profile={profile} />} />
               <Route path="dtr-submissions" element={<AdminDtrPage />} />
               <Route path="requirements" element={<AdminRequirementsPage />} />
               <Route path="users" element={<AdminUsersPage />} />

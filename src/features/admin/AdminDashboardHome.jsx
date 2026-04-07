@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, CheckCircle2, Clock3, FileText, RefreshCcw, ShieldCheck, Users } from "lucide-react";
+import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -30,25 +31,105 @@ function getRequirementTypeLabel(row) {
   return row.requirement_type === "Signature" ? "Signature" : row.document_type || "Requirement";
 }
 
-export default function AdminDashboardHome() {
+function getDashboardSoundPreferenceKey(profileId) {
+  return `admin-dashboard-sound-muted:${profileId || "default"}`;
+}
+
+function playSoftNotificationSound(tone) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+  if (!AudioContextClass) {
+    return;
+  }
+
+  try {
+    const audioContext = new AudioContextClass();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    const now = audioContext.currentTime;
+    const toneConfig =
+      tone === "requirement"
+        ? { start: 587, end: 698, attack: 0.015, peak: 0.012, releaseAt: 0.26, stopAt: 0.3 }
+        : { start: 784, end: 1046, attack: 0.02, peak: 0.018, releaseAt: 0.3, stopAt: 0.36 };
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(toneConfig.start, now);
+    oscillator.frequency.exponentialRampToValueAtTime(toneConfig.end, now + 0.18);
+
+    gainNode.gain.setValueAtTime(0.0001, now);
+    gainNode.gain.exponentialRampToValueAtTime(toneConfig.peak, now + toneConfig.attack);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + toneConfig.releaseAt);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.start(now);
+    oscillator.stop(now + toneConfig.stopAt);
+    oscillator.onended = () => {
+      audioContext.close().catch(() => {});
+    };
+  } catch {
+    // Ignore notification sound failures and keep the realtime UI responsive.
+  }
+}
+
+export default function AdminDashboardHome({ profile }) {
   const [recentDtrRows, setRecentDtrRows] = useState([]);
   const [allDtrRows, setAllDtrRows] = useState([]);
   const [recentRequirementRows, setRecentRequirementRows] = useState([]);
   const [allRequirementRows, setAllRequirementRows] = useState([]);
   const [profiles, setProfiles] = useState([]);
+  const [highlightedDtrId, setHighlightedDtrId] = useState(null);
+  const [highlightedRequirementId, setHighlightedRequirementId] = useState(null);
+  const [soundMuted, setSoundMuted] = useState(false);
+  const [unreadDtrCount, setUnreadDtrCount] = useState(0);
+  const [unreadRequirementCount, setUnreadRequirementCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const soundMutedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const preferenceKey = getDashboardSoundPreferenceKey(profile?.id);
+    const syncPreference = () => {
+      const isMuted = window.localStorage.getItem(preferenceKey) === "true";
+      soundMutedRef.current = isMuted;
+      setSoundMuted(isMuted);
+    };
+
+    const handlePreferenceChange = (event) => {
+      if (!event.detail || event.detail.profileId === profile?.id) {
+        syncPreference();
+      }
+    };
+
+    syncPreference();
+    window.addEventListener("storage", syncPreference);
+    window.addEventListener("admin-dashboard-sound-preference-change", handlePreferenceChange);
+
+    return () => {
+      window.removeEventListener("storage", syncPreference);
+      window.removeEventListener("admin-dashboard-sound-preference-change", handlePreferenceChange);
+    };
+  }, [profile?.id]);
 
   useEffect(() => {
     loadData();
 
     const dtrChannel = supabase
       .channel("admin-dashboard-dtr")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, handleDtrChange)
       .subscribe();
 
     const documentsChannel = supabase
       .channel("admin-dashboard-documents")
-      .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, handleRequirementChange)
       .subscribe();
 
     const profilesChannel = supabase
@@ -68,6 +149,142 @@ export default function AdminDashboardHome() {
       supabase.removeChannel(presenceChannel);
     };
   }, []);
+
+  function upsertRecentDtrRow(nextRow) {
+    setRecentDtrRows((current) =>
+      [nextRow, ...current.filter((row) => row.id !== nextRow.id)]
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+        .slice(0, 8)
+    );
+  }
+
+  function upsertAllDtrRow(nextRow) {
+    setAllDtrRows((current) =>
+      [nextRow, ...current.filter((row) => row.id !== nextRow.id)].sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      )
+    );
+  }
+
+  function upsertRecentRequirementRow(nextRow) {
+    setRecentRequirementRows((current) =>
+      [nextRow, ...current.filter((row) => row.id !== nextRow.id)]
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+        .slice(0, 8)
+    );
+  }
+
+  function upsertAllRequirementRow(nextRow) {
+    setAllRequirementRows((current) =>
+      [nextRow, ...current.filter((row) => row.id !== nextRow.id)].sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      )
+    );
+  }
+
+  function flashNewActivity(setter, id) {
+    setter(id);
+    window.setTimeout(() => {
+      setter((current) => (current === id ? null : current));
+    }, 2200);
+  }
+
+  function maybePlayNotificationSound(tone) {
+    if (soundMutedRef.current) {
+      return;
+    }
+
+    playSoftNotificationSound(tone);
+  }
+
+  function resetUnreadCount(type) {
+    if (type === "dtr") {
+      setUnreadDtrCount(0);
+      return;
+    }
+
+    setUnreadRequirementCount(0);
+  }
+
+  async function handleDtrChange(payload) {
+    if (payload.eventType === "DELETE") {
+      setRecentDtrRows((current) => current.filter((row) => row.id !== payload.old.id));
+      setAllDtrRows((current) => current.filter((row) => row.id !== payload.old.id));
+      return;
+    }
+
+    const summaryRow = {
+      id: payload.new.id,
+      status: payload.new.status,
+      created_at: payload.new.created_at,
+      approved_at: payload.new.approved_at,
+    };
+    upsertAllDtrRow(summaryRow);
+
+    const { data, error } = await supabase
+      .from("dtr_submissions")
+      .select("id,status,created_at,cutoff,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location,branch)")
+      .eq("id", payload.new.id)
+      .maybeSingle();
+
+    if (!error && data) {
+      upsertRecentDtrRow(data);
+      if (payload.eventType === "INSERT") {
+        flashNewActivity(setHighlightedDtrId, data.id);
+        setUnreadDtrCount((current) => current + 1);
+        toast.success("New DTR received.");
+        maybePlayNotificationSound("dtr");
+      }
+    } else {
+      loadData();
+    }
+  }
+
+  async function handleRequirementChange(payload) {
+    if (payload.eventType === "DELETE") {
+      setRecentRequirementRows((current) => current.filter((row) => row.id !== payload.old.id));
+      setAllRequirementRows((current) => current.filter((row) => row.id !== payload.old.id));
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("employee_documents")
+      .select(
+        "id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(full_name,employee_id,location,branch)"
+      )
+      .eq("id", payload.new.id)
+      .maybeSingle();
+
+    if (error || !data) {
+      loadData();
+      return;
+    }
+
+    const nextRow = {
+      ...data,
+      requirement_type: data.document_type,
+      status: data.review_status || "Pending Review",
+      source: "employee_documents",
+    };
+
+    upsertAllRequirementRow(nextRow);
+    upsertRecentRequirementRow(nextRow);
+
+    if (payload.eventType === "INSERT") {
+      flashNewActivity(setHighlightedRequirementId, nextRow.id);
+      setUnreadRequirementCount((current) => current + 1);
+      toast("New requirement received.", {
+        duration: 2200,
+        icon: "",
+        style: {
+          border: "1px solid #e2e8f0",
+          background: "#f8fafc",
+          color: "#334155",
+        },
+      });
+      maybePlayNotificationSound("requirement");
+    }
+  }
 
   async function loadData() {
     setLoading(true);
@@ -243,16 +460,24 @@ export default function AdminDashboardHome() {
         <Card>
           <div className="admin-section-head">
             <div>
-              <h2 className="admin-section-title admin-dashboard-home__section-title">Recent DTR Activity</h2>
+              <div className="admin-dashboard-home__heading-row">
+                <h2 className="admin-section-title admin-dashboard-home__section-title">Recent DTR Activity</h2>
+                {unreadDtrCount > 0 ? <span className="admin-dashboard-home__unread-badge">+{unreadDtrCount}</span> : null}
+              </div>
               <p className="admin-section-copy">Last {recentDtrRows.length} submissions</p>
             </div>
-            <Link className="admin-link" to="/admin/dtr-submissions">
+            <Link className="admin-link" to="/admin/dtr-submissions" onClick={() => resetUnreadCount("dtr")}>
               Review Queue
             </Link>
           </div>
           <div className="admin-dashboard-home__activity-list">
             {recentDtrRows.map((row) => (
-              <div key={row.id} className="admin-list-card admin-dashboard-home__activity-item">
+              <div
+                key={row.id}
+                className={`admin-list-card admin-dashboard-home__activity-item${
+                  highlightedDtrId === row.id ? " admin-dashboard-home__activity-item--new" : ""
+                }`}
+              >
                 <div>
                   <p className="admin-dashboard-home__activity-name">{row.profiles?.full_name || "Unknown Employee"}</p>
                   <p className="app-copy-sm">
@@ -273,13 +498,28 @@ export default function AdminDashboardHome() {
         <Card>
           <div className="admin-section-head">
             <div>
-              <h2 className="admin-section-title admin-dashboard-home__section-title">Recent Requirement Activity</h2>
+              <div className="admin-dashboard-home__heading-row">
+                <h2 className="admin-section-title admin-dashboard-home__section-title">Recent Requirement Activity</h2>
+                {unreadRequirementCount > 0 ? (
+                  <span className="admin-dashboard-home__unread-badge admin-dashboard-home__unread-badge--requirements">
+                    +{unreadRequirementCount}
+                  </span>
+                ) : null}
+              </div>
               <p className="admin-section-copy">Employee documents and signatures</p>
             </div>
+            <Link className="admin-link" to="/admin/requirements" onClick={() => resetUnreadCount("requirements")}>
+              Review Queue
+            </Link>
           </div>
           <div className="admin-dashboard-home__activity-list">
             {recentRequirementRows.map((row) => (
-              <div key={row.id} className="admin-list-card admin-dashboard-home__activity-item">
+              <div
+                key={row.id}
+                className={`admin-list-card admin-dashboard-home__activity-item${
+                  highlightedRequirementId === row.id ? " admin-dashboard-home__activity-item--new" : ""
+                }`}
+              >
                 <div>
                   <p className="admin-dashboard-home__activity-name">{row.profiles?.full_name || "Unknown Employee"}</p>
                   <p className="app-copy-sm">
@@ -354,3 +594,4 @@ export default function AdminDashboardHome() {
     </div>
   );
 }
+

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bell, LayoutDashboard, FileClock, Files, Users, FileBarChart2, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 import Modal from "../../components/ui/Modal";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { supabase } from "../../lib/supabase";
@@ -16,6 +16,7 @@ const items = [
 ];
 
 export default function AdminLayout({ profile }) {
+  const location = useLocation();
   const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [seenNotificationIds, setSeenNotificationIds] = useState([]);
@@ -158,6 +159,26 @@ export default function AdminLayout({ profile }) {
     }
   }
 
+  function isItemActive({ to, end }) {
+    return Boolean(
+      matchPath(
+        {
+          path: to,
+          end: Boolean(end),
+        },
+        location.pathname
+      )
+    );
+  }
+
+  function getTooltipLabel(item) {
+    if (!sidebarCollapsed) {
+      return undefined;
+    }
+
+    return isItemActive(item) ? `Current page: ${item.label}` : item.label;
+  }
+
   return (
     <div className={`admin-layout${sidebarCollapsed ? " admin-layout--collapsed" : ""}`}>
       <button
@@ -178,7 +199,7 @@ export default function AdminLayout({ profile }) {
               end={end}
               onClick={handleNavClick}
               aria-label={label}
-              data-tooltip={sidebarCollapsed ? label : undefined}
+              data-tooltip={getTooltipLabel({ to, label, end })}
               className={({ isActive }) =>
                 `admin-layout__nav-link${isActive ? " admin-layout__nav-link--active" : ""}`
               }

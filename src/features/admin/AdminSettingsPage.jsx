@@ -6,6 +6,10 @@ import Button from "../../components/ui/Button";
 import { supabase } from "../../lib/supabase";
 import "./AdminSettingsPage.css";
 
+function getDashboardSoundPreferenceKey(profileId) {
+  return `admin-dashboard-sound-muted:${profileId || "default"}`;
+}
+
 export default function AdminSettingsPage({ profile, refreshProfile }) {
   const [form, setForm] = useState({
     full_name: "",
@@ -14,6 +18,7 @@ export default function AdminSettingsPage({ profile, refreshProfile }) {
     supervisor: "",
     shift: "",
   });
+  const [dashboardSoundMuted, setDashboardSoundMuted] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -26,8 +31,36 @@ export default function AdminSettingsPage({ profile, refreshProfile }) {
     });
   }, [profile]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedPreference = window.localStorage.getItem(getDashboardSoundPreferenceKey(profile?.id));
+    setDashboardSoundMuted(storedPreference === "true");
+  }, [profile?.id]);
+
   function setField(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleDashboardSound() {
+    const nextValue = !dashboardSoundMuted;
+    setDashboardSoundMuted(nextValue);
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(getDashboardSoundPreferenceKey(profile?.id), String(nextValue));
+      window.dispatchEvent(
+        new CustomEvent("admin-dashboard-sound-preference-change", {
+          detail: {
+            profileId: profile?.id ?? null,
+            muted: nextValue,
+          },
+        })
+      );
+    }
+
+    toast.success(nextValue ? "Dashboard sounds muted." : "Dashboard sounds enabled.");
   }
 
   async function saveSettings() {
@@ -86,6 +119,28 @@ export default function AdminSettingsPage({ profile, refreshProfile }) {
             <p className="app-note-title">Current admin account</p>
             <p className="app-note-copy app-note-copy--break">{profile?.id || "No active profile loaded."}</p>
           </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="admin-section-intro">
+          <h2 className="admin-section-title">Realtime Alerts</h2>
+          <p className="admin-section-copy">Control the small dashboard sounds used for new DTR and requirement notifications.</p>
+        </div>
+        <div className="admin-settings-page__toggle-row">
+          <div>
+            <p className="app-note-title">Mute dashboard sounds</p>
+            <p className="app-note-copy">Visual toasts and activity highlights will still appear even when sound is off.</p>
+          </div>
+          <button
+            type="button"
+            className={`admin-settings-page__toggle${dashboardSoundMuted ? " admin-settings-page__toggle--muted" : ""}`}
+            onClick={toggleDashboardSound}
+            aria-pressed={dashboardSoundMuted}
+          >
+            <span className="admin-settings-page__toggle-thumb" />
+            <span className="admin-settings-page__toggle-copy">{dashboardSoundMuted ? "Muted" : "On"}</span>
+          </button>
         </div>
       </Card>
     </div>

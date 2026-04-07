@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, CheckCircle2, Clock3, FileText, Users } from "lucide-react";
+import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -21,6 +22,7 @@ export default function SupervisorDashboardHome({ profile }) {
   const [dtrRows, setDtrRows] = useState([]);
   const [requirementRows, setRequirementRows] = useState([]);
   const [teamProfiles, setTeamProfiles] = useState([]);
+  const [highlightedDtrId, setHighlightedDtrId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,12 +30,12 @@ export default function SupervisorDashboardHome({ profile }) {
 
     const dtrChannel = supabase
       .channel("supervisor-dashboard-dtr")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, handleDtrChange)
       .subscribe();
 
     const documentsChannel = supabase
       .channel("supervisor-dashboard-documents")
-      .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, handleRequirementChange)
       .subscribe();
 
     const profilesChannel = supabase
@@ -53,6 +55,96 @@ export default function SupervisorDashboardHome({ profile }) {
       supabase.removeChannel(presenceChannel);
     };
   }, [profile?.location, profile?.branch]);
+
+  function upsertScopedDtrRow(nextRow) {
+    setDtrRows((current) =>
+      [nextRow, ...current.filter((row) => row.id !== nextRow.id)].sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      )
+    );
+  }
+
+  function upsertScopedRequirementRow(nextRow) {
+    setRequirementRows((current) =>
+      [nextRow, ...current.filter((row) => row.id !== nextRow.id)].sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      )
+    );
+  }
+
+  function flashNewDtr(id) {
+    setHighlightedDtrId(id);
+    window.setTimeout(() => {
+      setHighlightedDtrId((current) => (current === id ? null : current));
+    }, 2200);
+  }
+
+  async function handleDtrChange(payload) {
+    if (payload.eventType === "DELETE") {
+      setDtrRows((current) => current.filter((row) => row.id !== payload.old.id));
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("dtr_submissions")
+      .select("id,status,cutoff,created_at,approved_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location,branch)")
+      .eq("id", payload.new.id)
+      .maybeSingle();
+
+    if (error || !data) {
+      loadData();
+      return;
+    }
+
+    if (!matchesSupervisorScope(data, profile)) {
+      setDtrRows((current) => current.filter((row) => row.id !== data.id));
+      return;
+    }
+
+    upsertScopedDtrRow(data);
+
+    if (payload.eventType === "INSERT") {
+      flashNewDtr(data.id);
+      toast.success("New DTR received.");
+    }
+  }
+
+  async function handleRequirementChange(payload) {
+    if (payload.eventType === "DELETE") {
+      setRequirementRows((current) => current.filter((row) => row.id !== payload.old.id));
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("employee_documents")
+      .select("id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(full_name,employee_id,location,branch)")
+      .eq("id", payload.new.id)
+      .maybeSingle();
+
+    if (error || !data) {
+      loadData();
+      return;
+    }
+
+    if (!matchesSupervisorScope(data, profile)) {
+      setRequirementRows((current) => current.filter((row) => row.id !== data.id));
+      return;
+    }
+
+    upsertScopedRequirementRow(data);
+
+    if (payload.eventType === "INSERT") {
+      toast("New requirement received.", {
+        duration: 2200,
+        icon: "📄",
+        style: {
+          border: "1px solid #dcfce7",
+          background: "#f0fdf4",
+          color: "#166534",
+        },
+      });
+    }
+  }
 
   async function loadData() {
     setLoading(true);
@@ -181,7 +273,12 @@ export default function SupervisorDashboardHome({ profile }) {
           </div>
           <div className="admin-dashboard-home__activity-list">
             {dtrRows.slice(0, 6).map((row) => (
-              <div key={row.id} className="admin-list-card admin-dashboard-home__activity-item">
+              <div
+                key={row.id}
+                className={`admin-list-card admin-dashboard-home__activity-item${
+                  highlightedDtrId === row.id ? " admin-dashboard-home__activity-item--new" : ""
+                }`}
+              >
                 <div>
                   <p className="admin-dashboard-home__activity-name">{row.profiles?.full_name || "Unknown Employee"}</p>
                   <p className="app-copy-sm">{row.profiles?.employee_id || "No Employee ID"} | {row.cutoff || "No cutoff"}</p>
