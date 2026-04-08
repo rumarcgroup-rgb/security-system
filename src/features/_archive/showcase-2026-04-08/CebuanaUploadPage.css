@@ -1,0 +1,415 @@
+.cebuana-live-upload__content {
+  gap: 1rem;
+}
+
+.cebuana-live-upload__banner,
+.cebuana-live-upload__status-banner,
+.cebuana-live-upload__access-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  border: 1px solid var(--cebuana-border);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.cebuana-live-upload__banner strong,
+.cebuana-live-upload__access-card strong {
+  display: block;
+  color: var(--cebuana-ink);
+}
+
+.cebuana-live-upload__banner span,
+.cebuana-live-upload__access-card p,
+.cebuana-live-upload__summary-card p,
+.cebuana-live-upload__progress,
+.cebuana-live-upload__duplicate-warning span,
+.cebuana-live-upload__scope-note span,
+.cebuana-live-upload__mini-empty,
+.cebuana-live-upload__history-item span,
+.cebuana-live-upload__history-item em,
+.cebuana-live-upload__file-copy span,
+.cebuana-live-upload__file-copy em,
+.cebuana-live-upload__summary-file span,
+.cebuana-live-upload__summary-file em {
+  color: var(--cebuana-muted);
+  font-size: 0.82rem;
+}
+
+.cebuana-live-upload__status-banner {
+  justify-content: flex-start;
+}
+
+.cebuana-live-upload__status-banner > div {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.cebuana-live-upload__status-banner strong {
+  color: var(--cebuana-ink);
+  font-size: 0.86rem;
+}
+
+.cebuana-live-upload__status-banner--success {
+  background: #edf9ef;
+  border-color: rgba(66, 168, 82, 0.25);
+}
+
+.cebuana-live-upload__status-banner--warning {
+  background: #fff8ea;
+  border-color: rgba(206, 155, 46, 0.24);
+}
+
+.cebuana-live-upload__status-banner--error {
+  background: #fff1f1;
+  border-color: rgba(204, 74, 74, 0.22);
+}
+
+.cebuana-live-upload__summary-grid,
+.cebuana-live-upload__workspace,
+.cebuana-live-upload__main,
+.cebuana-live-upload__side,
+.cebuana-live-upload__history-list,
+.cebuana-live-upload__file-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.cebuana-live-upload__summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cebuana-live-upload__workspace {
+  grid-template-columns: minmax(0, 1.4fr) minmax(310px, 0.8fr);
+}
+
+.cebuana-live-upload__summary-card,
+.cebuana-live-upload__card {
+  padding: 1rem 1.1rem;
+  border-radius: 1.1rem;
+  border: 1px solid var(--cebuana-border);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.cebuana-live-upload__summary-card span {
+  display: block;
+  color: var(--cebuana-blue-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cebuana-live-upload__summary-card strong {
+  display: block;
+  margin-top: 0.38rem;
+  font-size: 1.7rem;
+  color: var(--cebuana-ink);
+}
+
+.cebuana-live-upload__card-head,
+.cebuana-live-upload__actions,
+.cebuana-live-upload__file-card,
+.cebuana-live-upload__summary-file,
+.cebuana-live-upload__history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.cebuana-live-upload__card-head strong,
+.cebuana-live-upload__file-copy strong,
+.cebuana-live-upload__summary-file strong,
+.cebuana-live-upload__history-item strong {
+  display: block;
+  color: var(--cebuana-ink);
+}
+
+.cebuana-live-upload__card-head p {
+  margin: 0.25rem 0 0;
+  color: var(--cebuana-muted);
+  font-size: 0.84rem;
+}
+
+.cebuana-live-upload__duplicate-warning,
+.cebuana-live-upload__collapse-note,
+.cebuana-live-upload__scope-note {
+  display: grid;
+  gap: 0.28rem;
+  margin-top: 0.9rem;
+  padding: 0.82rem 0.88rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(206, 155, 46, 0.24);
+  background: #fff8ea;
+}
+
+.cebuana-live-upload__collapse-note {
+  border-color: rgba(21, 95, 208, 0.22);
+  background: var(--cebuana-blue-soft);
+}
+
+.cebuana-live-upload__duplicate-warning strong,
+.cebuana-live-upload__collapse-note strong,
+.cebuana-live-upload__scope-note strong {
+  color: var(--cebuana-ink);
+  font-size: 0.86rem;
+}
+
+.cebuana-live-upload__scope-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.28rem;
+}
+
+.cebuana-live-upload__file-card--duplicate {
+  border-color: rgba(206, 155, 46, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(206, 155, 46, 0.15);
+}
+
+.cebuana-live-upload__inline-duplicate {
+  display: inline-block;
+  margin-top: 0.28rem;
+  color: #a16207;
+  font-size: 0.76rem;
+}
+
+.cebuana-live-upload__file-button,
+.cebuana-live-upload__primary-button,
+.cebuana-live-upload__secondary-button,
+.cebuana-live-upload__remove {
+  border: 0;
+  border-radius: 0.9rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cebuana-live-upload__file-button,
+.cebuana-live-upload__primary-button,
+.cebuana-live-upload__secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.78rem 1rem;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(135deg, #0f5ed9 0%, #0b3b8f 100%);
+}
+
+.cebuana-live-upload__secondary-button,
+.cebuana-live-upload__file-button--green {
+  background: linear-gradient(135deg, #46af59 0%, #2f8f41 100%);
+}
+
+.cebuana-live-upload__button-stack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cebuana-live-upload__hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  opacity: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.cebuana-live-upload__file-card,
+.cebuana-live-upload__summary-file,
+.cebuana-live-upload__history-item {
+  padding: 0.78rem 0.88rem;
+  border-radius: 0.95rem;
+  border: 1px solid var(--cebuana-border);
+  background: white;
+}
+
+.cebuana-live-upload__file-card--uploaded,
+.cebuana-live-upload__summary-file--uploaded {
+  background: #edf9ef;
+}
+
+.cebuana-live-upload__file-card--error,
+.cebuana-live-upload__summary-file--error {
+  background: #fff1f1;
+}
+
+.cebuana-live-upload__file-card--skipped {
+  background: #fff8ea;
+}
+
+.cebuana-live-upload__file-thumb {
+  width: 3rem;
+  height: 2.45rem;
+  overflow: hidden;
+  border-radius: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(11, 59, 143, 0.12);
+  background: var(--cebuana-blue-soft);
+}
+
+.cebuana-live-upload__file-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cebuana-live-upload__file-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.cebuana-live-upload__assign,
+.cebuana-live-upload__field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.cebuana-live-upload__assign span,
+.cebuana-live-upload__field span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--cebuana-ink);
+}
+
+.cebuana-live-upload__assign select,
+.cebuana-live-upload__field select,
+.cebuana-live-upload__field textarea {
+  min-width: 0;
+  padding: 0.76rem 0.88rem;
+  border-radius: 0.88rem;
+  border: 1px solid var(--cebuana-border);
+  background: white;
+  font: inherit;
+  color: var(--cebuana-ink);
+}
+
+.cebuana-live-upload__field + .cebuana-live-upload__field {
+  margin-top: 0.82rem;
+}
+
+.cebuana-live-upload__remove {
+  padding: 0.62rem 0.8rem;
+  color: #bb4c4c;
+  background: #fff4f4;
+}
+
+.cebuana-live-upload__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--cebuana-ink);
+  font-size: 0.84rem;
+}
+
+.cebuana-live-upload__empty,
+.cebuana-live-upload__mini-empty,
+.cebuana-live-upload__access-card {
+  text-align: center;
+}
+
+.cebuana-live-upload__empty {
+  display: grid;
+  place-items: center;
+  gap: 0.35rem;
+  padding: 1.2rem 1rem;
+  border-radius: 0.95rem;
+  border: 1px dashed var(--cebuana-border);
+  color: var(--cebuana-muted);
+}
+
+.cebuana-live-upload__empty--interactive {
+  width: 100%;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cebuana-live-upload__empty--interactive span {
+  color: var(--cebuana-blue-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.cebuana-live-upload__history-item a {
+  color: var(--cebuana-blue-strong);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.cebuana-live-upload__history-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.cebuana-live-upload__history-button {
+  border: 1px solid var(--cebuana-border);
+  background: var(--cebuana-blue-soft);
+  color: var(--cebuana-blue-strong);
+  border-radius: 0.8rem;
+  padding: 0.5rem 0.72rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cebuana-live-upload__lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1.4rem;
+  background: rgba(10, 18, 32, 0.68);
+}
+
+.cebuana-live-upload__lightbox-card {
+  width: min(100%, 820px);
+  max-height: calc(100vh - 2.8rem);
+  overflow: auto;
+  border-radius: 1.2rem;
+  background: white;
+  padding: 1rem;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.28);
+}
+
+.cebuana-live-upload__lightbox-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.cebuana-live-upload__lightbox-head strong {
+  color: var(--cebuana-ink);
+}
+
+.cebuana-live-upload__lightbox-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 0.95rem;
+}
+
+@media (max-width: 920px) {
+  .cebuana-live-upload__summary-grid,
+  .cebuana-live-upload__workspace {
+    grid-template-columns: 1fr;
+  }
+}

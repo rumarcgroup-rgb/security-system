@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BarChart3,
   Bell,
@@ -12,7 +13,7 @@ import {
   FileImage,
   FileWarning,
   ImageIcon,
-  Map,
+  Map as MapIcon,
   MapPinned,
   Search,
   SlidersHorizontal,
@@ -36,6 +37,11 @@ const areaOptions = ["Cebu City Area", "Mandaue Area", "Lapu-Lapu Area", "South 
 const branchOptions = ["Cebu Main Branch", "IT Park Branch", "Colon Branch", "Mactan Branch"];
 const courierOptions = ["LBC Express", "JRS Express", "Personal Delivery", "Branch Messenger"];
 const dashboardFilterStorageKey = "cebuana-preview-dashboard-filters";
+const guardsFilterStorageKey = "cebuana-preview-guards-filters";
+const previewActiveTabStorageKey = "cebuana-preview-active-tab";
+const previewPresentationModeStorageKey = "cebuana-preview-presentation-mode";
+const previewSettingsStorageKey = "cebuana-preview-settings";
+const previewUploadWorkspaceStorageKey = "cebuana-preview-upload-workspace";
 const dashboardRealtimeChannelName = "cebuana-preview-dashboard-dtr";
 
 const sampleGuardFiles = [
@@ -291,6 +297,19 @@ const mockReports = [
   { label: "Summaries", value: "4", copy: "Last 4 cutoffs submitted on time" },
 ];
 
+const mockReportHighlights = [
+  { branch: "Cebu Main Branch", summary: "5 of 6 guards submitted", detail: "1 guard still missing before cutoff close" },
+  { branch: "IT Park Branch", summary: "2 follow-ups still pending", detail: "Needs one corrected DTR packet" },
+  { branch: "Colon Branch", summary: "Summary cleared before cutoff end", detail: "No pending issues in branch queue" },
+];
+
+const mockTrendPoints = [
+  { label: "Apr 12", value: 5 },
+  { label: "Apr 19", value: 7 },
+  { label: "Apr 26", value: 6 },
+  { label: "May 3", value: 8 },
+];
+
 const mockSettings = [
   { label: "Remember last selections", value: "Enabled" },
   { label: "Notify on missing DTRs", value: "On" },
@@ -538,6 +557,66 @@ function MockStatusPill({ status }) {
   return <span className={`cebuana-preview__status-pill ${toneClass}`}>{status}</span>;
 }
 
+function buildReportTrendPoints(rows) {
+  const datedRows = rows.filter((row) => row.created_at && !Number.isNaN(new Date(row.created_at).getTime()));
+
+  if (!datedRows.length) {
+    return mockTrendPoints;
+  }
+
+  const grouped = datedRows.reduce((acc, row) => {
+    const parsedDate = new Date(row.created_at);
+    const label = parsedDate.toLocaleDateString([], { month: "short", day: "numeric" });
+    acc[label] = (acc[label] || 0) + 1;
+    return acc;
+  }, {});
+
+  const labels = Object.entries(grouped)
+    .map(([label, value]) => ({ label, value }))
+    .slice(-4);
+
+  return labels.length ? labels : mockTrendPoints;
+}
+
+function buildBranchHighlights(guards) {
+  if (!guards.length) {
+    return mockReportHighlights;
+  }
+
+  const grouped = guards.reduce((acc, guard) => {
+    const key = guard.branch || "Unassigned branch";
+    const entry = acc[key] || { branch: key, total: 0, submitted: 0, missing: 0, corrections: 0 };
+    entry.total += 1;
+
+    if (guard.status === "Missing") {
+      entry.missing += 1;
+    } else {
+      entry.submitted += 1;
+    }
+
+    if (guard.status === "Needs Correction") {
+      entry.corrections += 1;
+    }
+
+    acc[key] = entry;
+    return acc;
+  }, {});
+
+  return Object.values(grouped)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 3)
+    .map((entry) => ({
+      branch: entry.branch,
+      summary: `${entry.submitted} of ${entry.total} guards submitted`,
+      detail:
+        entry.corrections > 0
+          ? `${entry.corrections} guard${entry.corrections === 1 ? "" : "s"} need correction follow-up`
+          : entry.missing > 0
+            ? `${entry.missing} guard${entry.missing === 1 ? "" : "s"} still missing`
+            : "All visible guards are on track for this cutoff",
+    }));
+}
+
 function readDashboardFilters() {
   if (typeof window === "undefined") {
     return {
@@ -579,6 +658,166 @@ function readDashboardFilters() {
   }
 }
 
+function readPreviewSettings() {
+  if (typeof window === "undefined") {
+    return {
+      compactMode: false,
+      animationsEnabled: true,
+      showLiveBadges: true,
+    };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(previewSettingsStorageKey);
+
+    if (!rawValue) {
+      return {
+        compactMode: false,
+        animationsEnabled: true,
+        showLiveBadges: true,
+      };
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+
+    return {
+      compactMode: Boolean(parsedValue?.compactMode),
+      animationsEnabled: parsedValue?.animationsEnabled !== false,
+      showLiveBadges: parsedValue?.showLiveBadges !== false,
+    };
+  } catch {
+    return {
+      compactMode: false,
+      animationsEnabled: true,
+      showLiveBadges: true,
+    };
+  }
+}
+
+function readGuardsFilters() {
+  if (typeof window === "undefined") {
+    return {
+      guardFilter: "All",
+      guardSearchQuery: "",
+    };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(guardsFilterStorageKey);
+
+    if (!rawValue) {
+      return {
+        guardFilter: "All",
+        guardSearchQuery: "",
+      };
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+
+    return {
+      guardFilter: ["All", "Uploaded", "Needs Correction", "Missing"].includes(parsedValue?.guardFilter)
+        ? parsedValue.guardFilter
+        : "All",
+      guardSearchQuery: typeof parsedValue?.guardSearchQuery === "string" ? parsedValue.guardSearchQuery : "",
+    };
+  } catch {
+    return {
+      guardFilter: "All",
+      guardSearchQuery: "",
+    };
+  }
+}
+
+function readPreviewActiveTab() {
+  if (typeof window === "undefined") {
+    return "Dashboard";
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(previewActiveTabStorageKey);
+    return bottomNav.some((item) => item.label === rawValue) ? rawValue : "Dashboard";
+  } catch {
+    return "Dashboard";
+  }
+}
+
+function readPresentationModeEnabled() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(previewPresentationModeStorageKey) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function readUploadWorkspace() {
+  if (typeof window === "undefined") {
+    return {
+      cutoff: cutoffOptions[0],
+      area: areaOptions[0],
+      branch: branchOptions[0],
+      courier: courierOptions[0],
+      trackingNumber: "LBC-124773284109",
+      dispatchMode: "single",
+    };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(previewUploadWorkspaceStorageKey);
+
+    if (!rawValue) {
+      return {
+        cutoff: cutoffOptions[0],
+        area: areaOptions[0],
+        branch: branchOptions[0],
+        courier: courierOptions[0],
+        trackingNumber: "LBC-124773284109",
+        dispatchMode: "single",
+      };
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+
+    return {
+      cutoff: cutoffOptions.includes(parsedValue?.cutoff) ? parsedValue.cutoff : cutoffOptions[0],
+      area: areaOptions.includes(parsedValue?.area) ? parsedValue.area : areaOptions[0],
+      branch: branchOptions.includes(parsedValue?.branch) ? parsedValue.branch : branchOptions[0],
+      courier: courierOptions.includes(parsedValue?.courier) ? parsedValue.courier : courierOptions[0],
+      trackingNumber:
+        typeof parsedValue?.trackingNumber === "string" && parsedValue.trackingNumber.trim()
+          ? parsedValue.trackingNumber
+          : "LBC-124773284109",
+      dispatchMode: parsedValue?.dispatchMode === "batch" ? "batch" : "single",
+    };
+  } catch {
+    return {
+      cutoff: cutoffOptions[0],
+      area: areaOptions[0],
+      branch: branchOptions[0],
+      courier: courierOptions[0],
+      trackingNumber: "LBC-124773284109",
+      dispatchMode: "single",
+    };
+  }
+}
+
+function SkeletonRows({ count = 3, type = "card" }) {
+  return (
+    <div className={`cebuana-preview__skeleton-list cebuana-preview__skeleton-list--${type}`} aria-hidden="true">
+      {Array.from({ length: count }).map((_, index) => (
+        <div key={`${type}-${index}`} className={`cebuana-preview__skeleton-card cebuana-preview__skeleton-card--${type}`}>
+          <span className="cebuana-preview__skeleton-line cebuana-preview__skeleton-line--primary" />
+          <span className="cebuana-preview__skeleton-line cebuana-preview__skeleton-line--secondary" />
+          {type !== "metric" ? <span className="cebuana-preview__skeleton-line cebuana-preview__skeleton-line--tertiary" /> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DashboardTab({
   rows,
   onReviewRow,
@@ -590,6 +829,7 @@ function DashboardTab({
   dashboardError,
   scopeLabel,
   lastSyncedAt,
+  showLiveBadges,
 }) {
   const [dashboardFilter, setDashboardFilter] = useState(() => readDashboardFilters().dashboardFilter);
   const [searchQuery, setSearchQuery] = useState(() => readDashboardFilters().searchQuery);
@@ -761,10 +1001,12 @@ function DashboardTab({
                 </button>
               ))}
             </div>
-            <div className="cebuana-preview__dashboard-head-badge">
-              <TrendingUp size={16} />
-              {dashboardLoading ? "Syncing..." : "Active Cutoff"}
-            </div>
+            {showLiveBadges ? (
+              <div className="cebuana-preview__dashboard-head-badge">
+                <TrendingUp size={16} />
+                {dashboardLoading ? "Syncing..." : "Active Cutoff"}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -914,10 +1156,12 @@ function DashboardTab({
                   </button>
                 ))}
               </div>
-              <div className="cebuana-preview__dashboard-head-badge cebuana-preview__dashboard-head-badge--success">
-                <CheckCircle2 size={16} />
-                {filteredSentRows.length} completed
-              </div>
+              {showLiveBadges ? (
+                <div className="cebuana-preview__dashboard-head-badge cebuana-preview__dashboard-head-badge--success">
+                  <CheckCircle2 size={16} />
+                  {filteredSentRows.length} completed
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -979,27 +1223,70 @@ function DashboardTab({
   );
 }
 
-function GuardsTab({ guards, dashboardMode, scopeLabel }) {
+function GuardsTab({ guards, dashboardMode, scopeLabel, dashboardLoading, showLiveBadges }) {
+  const [guardFilter, setGuardFilter] = useState(() => readGuardsFilters().guardFilter);
+  const [guardSearchQuery, setGuardSearchQuery] = useState(() => readGuardsFilters().guardSearchQuery);
+  const normalizedQuery = guardSearchQuery.trim().toLowerCase();
+  const searchedGuards = normalizedQuery
+    ? guards.filter(
+        (guard) =>
+          guard.name.toLowerCase().includes(normalizedQuery) || guard.employeeId.toLowerCase().includes(normalizedQuery),
+      )
+    : guards;
+  const filteredGuards =
+    guardFilter === "All" ? searchedGuards : searchedGuards.filter((guard) => guard.status === guardFilter);
+  const uploadedCount = filteredGuards.filter((guard) => guard.status === "Uploaded").length;
+  const missingCount = filteredGuards.filter((guard) => guard.status === "Missing").length;
+  const correctionCount = filteredGuards.filter((guard) => guard.status === "Needs Correction").length;
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(
+      guardsFilterStorageKey,
+      JSON.stringify({
+        guardFilter,
+        guardSearchQuery,
+      }),
+    );
+  }, [guardFilter, guardSearchQuery]);
+
   return (
     <>
       <section className="cebuana-preview__section">
         <div className="cebuana-preview__section-head">
-          <div className="cebuana-preview__section-icon">
-            <UsersRound size={18} />
+          <div className="cebuana-preview__section-head-main">
+            <div className="cebuana-preview__section-icon">
+              <UsersRound size={18} />
+            </div>
+            <div>
+              <h3>Guard Roster</h3>
+              <p>
+                {dashboardMode === "live"
+                  ? "Scoped employee profiles from Supabase with quick DTR coverage status."
+                  : "Preview how supervisors could scan DTR coverage by guard and branch."}
+              </p>
+            </div>
           </div>
-          <div>
-            <h3>Guard Roster</h3>
-            <p>
-              {dashboardMode === "live"
-                ? "Scoped employee profiles from Supabase with quick DTR coverage status."
-                : "Preview how supervisors could scan DTR coverage by guard and branch."}
-            </p>
-          </div>
+          {showLiveBadges ? (
+            <div className="cebuana-preview__section-head-actions">
+              <span
+                className={`cebuana-preview__dashboard-head-badge${
+                  dashboardMode === "live" ? " cebuana-preview__dashboard-head-badge--success" : ""
+                }`}
+              >
+                <ShieldCheck size={15} />
+                {dashboardMode === "live" ? "Live roster feed" : "Presentation roster"}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         <div className="cebuana-preview__roster-filters">
           <span className="cebuana-preview__filter-chip">
-            <Map size={14} />
+            <MapIcon size={14} />
             {scopeLabel}
           </span>
           <span className="cebuana-preview__filter-chip">
@@ -1012,31 +1299,110 @@ function GuardsTab({ guards, dashboardMode, scopeLabel }) {
           </span>
         </div>
 
-        <div className="cebuana-preview__roster-list">
-          {guards.map((guard) => (
-            <article key={guard.id} className="cebuana-preview__roster-card">
-              <div className="cebuana-preview__roster-main">
-                <div className="cebuana-preview__roster-avatar">
-                  <UserRound size={18} />
-                </div>
-                <div className="cebuana-preview__roster-copy">
-                  <strong>{guard.name}</strong>
-                  <span>{guard.employeeId}</span>
-                  <span>{guard.branch}  |  {guard.shift}</span>
-                </div>
-              </div>
-              <div className="cebuana-preview__roster-side">
-                <MockStatusPill status={guard.status} />
-                <button type="button" className="cebuana-preview__mini-action">Upload for Guard</button>
-              </div>
-            </article>
-          ))}
+        <div className="cebuana-preview__dashboard-table-head cebuana-preview__dashboard-table-head--guards">
+          <div>
+            <h3>Scoped Filters</h3>
+            <p>Search by guard name or employee ID, then narrow the current scope by submission status.</p>
+          </div>
+          <div className="cebuana-preview__dashboard-head-actions">
+            <label className="cebuana-preview__dashboard-search">
+              <Search size={15} className="cebuana-preview__dashboard-search-icon" aria-hidden="true" />
+              <input
+                type="text"
+                value={guardSearchQuery}
+                onChange={(event) => setGuardSearchQuery(event.target.value)}
+                placeholder="Search guard or employee ID"
+                aria-label="Search guard roster"
+              />
+            </label>
+            {guardSearchQuery ? (
+              <button
+                type="button"
+                className="cebuana-preview__dashboard-filter cebuana-preview__dashboard-filter--ghost"
+                onClick={() => setGuardSearchQuery("")}
+              >
+                Clear search
+              </button>
+            ) : null}
+            <div className="cebuana-preview__dashboard-filters">
+              {["All", "Uploaded", "Needs Correction", "Missing"].map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  className={`cebuana-preview__dashboard-filter${
+                    guardFilter === filter ? " cebuana-preview__dashboard-filter--active" : ""
+                  }`}
+                  onClick={() => setGuardFilter(filter)}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
+
+        <div className="cebuana-preview__guards-summary-grid">
+          <article className="cebuana-preview__guards-summary-card">
+            <span>Scoped Guards</span>
+            <strong>{filteredGuards.length}</strong>
+            <p>Roster entries currently visible after the active scope filters.</p>
+          </article>
+          <article className="cebuana-preview__guards-summary-card">
+            <span>Uploaded</span>
+            <strong>{uploadedCount}</strong>
+            <p>Guards with a submission signal already present.</p>
+          </article>
+          <article className="cebuana-preview__guards-summary-card">
+            <span>Attention Needed</span>
+            <strong>{missingCount + correctionCount}</strong>
+            <p>{missingCount} missing and {correctionCount} needing correction.</p>
+          </article>
+        </div>
+
+        {dashboardLoading && dashboardMode === "live" ? (
+          <SkeletonRows count={4} type="roster" />
+        ) : (
+          <div className="cebuana-preview__roster-list">
+            {filteredGuards.map((guard) => (
+              <article key={guard.id} className="cebuana-preview__roster-card">
+                <div className="cebuana-preview__roster-main">
+                  <div className="cebuana-preview__roster-avatar">
+                    <UserRound size={18} />
+                  </div>
+                  <div className="cebuana-preview__roster-copy">
+                    <strong>{guard.name}</strong>
+                    <span>{guard.employeeId}</span>
+                    <span>{guard.branch}  |  {guard.shift}</span>
+                  </div>
+                </div>
+                <div className="cebuana-preview__roster-side">
+                  <div className="cebuana-preview__roster-side-meta">
+                    <MockStatusPill status={guard.status} />
+                    <span className="cebuana-preview__roster-side-copy">
+                      {guard.status === "Uploaded"
+                        ? "Latest DTR received in scope"
+                        : guard.status === "Needs Correction"
+                          ? "Needs follow-up before dispatch"
+                          : "No submission captured yet"}
+                    </span>
+                  </div>
+                  <button type="button" className="cebuana-preview__mini-action">Upload for Guard</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
         {!guards.length ? (
           <div className="cebuana-preview__dashboard-empty">
             {dashboardMode === "live"
               ? "No scoped guard profiles were returned from Supabase."
               : "No mock guards are available in this preview state."}
+          </div>
+        ) : !dashboardLoading && !filteredGuards.length ? (
+          <div className="cebuana-preview__dashboard-empty">
+            {normalizedQuery
+              ? "No matching guards were found for the current search inside this scope."
+              : "No guards match the selected roster filter in this scope."}
           </div>
         ) : null}
       </section>
@@ -1044,96 +1410,247 @@ function GuardsTab({ guards, dashboardMode, scopeLabel }) {
   );
 }
 
-function ReportsTab() {
+function ReportsTab({ reportMetrics, trendPoints, branchHighlights, dashboardMode, scopeLabel, dashboardLoading, showLiveBadges }) {
+  const safeMetrics = reportMetrics?.length ? reportMetrics : mockReports;
+  const safeTrendPoints = trendPoints?.length ? trendPoints : mockTrendPoints;
+  const safeBranchHighlights = branchHighlights?.length ? branchHighlights : mockReportHighlights;
+  const trendMax = Math.max(...safeTrendPoints.map((item) => item.value), 1);
+
   return (
     <>
       <section className="cebuana-preview__section">
         <div className="cebuana-preview__section-head">
-          <div className="cebuana-preview__section-icon">
-            <FileBarChart2 size={18} />
+          <div className="cebuana-preview__section-head-main">
+            <div className="cebuana-preview__section-icon">
+              <FileBarChart2 size={18} />
+            </div>
+            <div>
+              <h3>Reports Snapshot</h3>
+              <p>Compliance and submission patterns for the selected cutoff.</p>
+            </div>
           </div>
-          <div>
-            <h3>Reports Snapshot</h3>
-            <p>Compliance and submission patterns for the selected cutoff.</p>
-          </div>
+          {showLiveBadges ? (
+            <div className="cebuana-preview__section-head-actions">
+              <span
+                className={`cebuana-preview__dashboard-head-badge${
+                  dashboardMode === "live" ? " cebuana-preview__dashboard-head-badge--success" : ""
+                }`}
+              >
+                <TrendingUp size={15} />
+                {dashboardMode === "live" ? "Scoped live aggregates" : "Presentation insights"}
+              </span>
+            </div>
+          ) : null}
         </div>
 
-        <div className="cebuana-preview__reports-grid">
-          {mockReports.map((item) => (
-            <article key={item.label} className="cebuana-preview__report-card">
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-              <p>{item.copy}</p>
-            </article>
-          ))}
-        </div>
+        {dashboardLoading && dashboardMode === "live" ? (
+          <>
+            <SkeletonRows count={3} type="metric" />
+            <div className="cebuana-preview__reports-detail-grid">
+              <SkeletonRows count={1} type="panel" />
+              <SkeletonRows count={1} type="panel" />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="cebuana-preview__reports-grid">
+              {safeMetrics.map((item, index) => (
+                <article
+                  key={item.label}
+                  className={`cebuana-preview__report-card${
+                    index === 0
+                      ? " cebuana-preview__report-card--blue"
+                      : index === 1
+                        ? " cebuana-preview__report-card--amber"
+                        : " cebuana-preview__report-card--green"
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <p>{item.copy}</p>
+                </article>
+              ))}
+            </div>
 
-        <div className="cebuana-preview__chart-card">
+            <div className="cebuana-preview__reports-detail-grid">
+              <div className="cebuana-preview__chart-card">
+                <div className="cebuana-preview__chart-head">
+                  <strong>Submission Trend</strong>
+                  <span>{dashboardMode === "live" ? scopeLabel : "Last 4 cutoffs"}</span>
+                </div>
+                <div className="cebuana-preview__chart-bars" aria-hidden="true">
+                  {safeTrendPoints.map((point) => (
+                    <div key={point.label} className="cebuana-preview__chart-column">
+                      <span style={{ height: `${Math.max((point.value / trendMax) * 100, 16)}%` }} />
+                      <small>{point.label}</small>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="cebuana-preview__report-panel">
+                <div className="cebuana-preview__chart-head">
+                  <strong>Branch Highlights</strong>
+                  <span>{dashboardMode === "live" ? "Scoped branches" : "This cutoff"}</span>
+                </div>
+                <div className="cebuana-preview__report-list">
+                  {safeBranchHighlights.map((item) => (
+                    <div key={item.branch} className="cebuana-preview__report-list-row">
+                      <strong>{item.branch}</strong>
+                      <span>{item.summary}</span>
+                      <span>{item.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="cebuana-preview__report-footer-card">
           <div className="cebuana-preview__chart-head">
-            <strong>Submission Trend</strong>
-            <span>Last 4 cutoffs</span>
+            <strong>Supervisor Readout</strong>
+            <span>{dashboardMode === "live" ? "Live scope summary" : "Preview-only summary"}</span>
           </div>
-          <div className="cebuana-preview__chart-bars" aria-hidden="true">
-            <span style={{ height: "52%" }} />
-            <span style={{ height: "76%" }} />
-            <span style={{ height: "64%" }} />
-            <span style={{ height: "88%" }} />
-          </div>
+          <p>
+            {dashboardMode === "live"
+              ? `These report cards are calculated from the current signed-in scope for ${scopeLabel}, while dispatch actions elsewhere in the preview remain safely mocked.`
+              : "This tablet report view is tuned for fast presentation: one glance for completion rate, one chart for trend, and one panel for branch follow-ups."}
+          </p>
         </div>
       </section>
     </>
   );
 }
 
-function SettingsTab() {
+function SettingsTab({ presentationSettings, onToggleSetting, onResetPreferences }) {
   return (
     <>
       <section className="cebuana-preview__section">
         <div className="cebuana-preview__section-head">
-          <div className="cebuana-preview__section-icon">
-            <Settings size={18} />
+          <div className="cebuana-preview__section-head-main">
+            <div className="cebuana-preview__section-icon">
+              <Settings size={18} />
+            </div>
+            <div>
+              <h3>Preview Settings</h3>
+              <p>Mock controls that support the Cebuana preview experience.</p>
+            </div>
           </div>
-          <div>
-            <h3>Preview Settings</h3>
-            <p>Mock controls that support the Cebuana preview experience.</p>
+          <div className="cebuana-preview__section-head-actions">
+            <span className="cebuana-preview__dashboard-head-badge">
+              <ShieldCheck size={15} />
+              Preview-safe controls
+            </span>
           </div>
+        </div>
+
+        <div className="cebuana-preview__settings-summary-grid">
+          <article className="cebuana-preview__settings-summary-card">
+            <span>Experience Mode</span>
+            <strong>{presentationSettings.compactMode ? "Compact tablet mode" : "Tablet presentation"}</strong>
+            <p>{presentationSettings.compactMode ? "Denser spacing for quicker scanning." : "Optimized for supervisor demos and walkthroughs."}</p>
+          </article>
+          <article className="cebuana-preview__settings-summary-card">
+            <span>Motion</span>
+            <strong>{presentationSettings.animationsEnabled ? "Animations on" : "Animations off"}</strong>
+            <p>Tab and interface motion stays inside this browser only.</p>
+          </article>
+          <article className="cebuana-preview__settings-summary-card">
+            <span>Live badges</span>
+            <strong>{presentationSettings.showLiveBadges ? "Visible" : "Hidden"}</strong>
+            <p>Toggle the live-feed badges without affecting any connected data.</p>
+          </article>
         </div>
 
         <div className="cebuana-preview__settings-list">
-          {mockSettings.map((item) => (
+          {[
+            ...mockSettings,
+            {
+              label: "Compact mode",
+              value: presentationSettings.compactMode ? "Enabled" : "Disabled",
+              key: "compactMode",
+              hint: "Tighten spacing across the preview cards and sections.",
+            },
+            {
+              label: "Tab animations",
+              value: presentationSettings.animationsEnabled ? "Enabled" : "Disabled",
+              key: "animationsEnabled",
+              hint: "Turn preview transitions on or off for presentation comfort.",
+            },
+            {
+              label: "Show live badges",
+              value: presentationSettings.showLiveBadges ? "Enabled" : "Disabled",
+              key: "showLiveBadges",
+              hint: "Show or hide the connected-data badges across dashboard, guards, and reports.",
+            },
+          ].map((item) => (
             <article key={item.label} className="cebuana-preview__settings-row">
               <div>
                 <strong>{item.label}</strong>
-                <span>Preview-only preference</span>
+                <span>{item.hint || "Preview-only preference"}</span>
               </div>
-              <span className="cebuana-preview__settings-value">{item.value}</span>
+              {item.key ? (
+                <button
+                  type="button"
+                  className={`cebuana-preview__settings-toggle${
+                    presentationSettings[item.key] ? " cebuana-preview__settings-toggle--active" : ""
+                  }`}
+                  onClick={() => onToggleSetting(item.key)}
+                >
+                  {item.value}
+                </button>
+              ) : (
+                <span className="cebuana-preview__settings-value">{item.value}</span>
+              )}
             </article>
           ))}
+        </div>
+
+        <div className="cebuana-preview__settings-note-card">
+          <div className="cebuana-preview__chart-head">
+            <strong>Environment Note</strong>
+            <span>Safe for demos</span>
+          </div>
+          <p>
+            These controls are intentionally non-destructive. The preview can look connected and polished without changing
+            your live supervisor workflow.
+          </p>
+          <div className="cebuana-preview__settings-note-actions">
+            <button type="button" className="cebuana-preview__demo-reset cebuana-preview__demo-reset--soft" onClick={onResetPreferences}>
+              <RotateCcw size={16} />
+              Reset preview preferences
+            </button>
+          </div>
         </div>
       </section>
     </>
   );
 }
 
-export default function CebuanaUploadPreviewPage({ profile = null }) {
+export default function CebuanaUploadPreviewPage({ profile = null, mode = "preview" }) {
+  const navigate = useNavigate();
+  const isProductionMode = mode === "production";
+  const isPrivilegedViewer = Boolean(profile && ["admin", "supervisor"].includes(profile.role));
   const allFilesRef = useRef([]);
-  const [cutoff, setCutoff] = useState(cutoffOptions[0]);
-  const [area, setArea] = useState(areaOptions[0]);
-  const [branch, setBranch] = useState(branchOptions[0]);
+  const [cutoff, setCutoff] = useState(() => readUploadWorkspace().cutoff);
+  const [area, setArea] = useState(() => readUploadWorkspace().area);
+  const [branch, setBranch] = useState(() => readUploadWorkspace().branch);
   const [guardFiles, setGuardFiles] = useState(sampleGuardFiles.map((file, index) => createPreviewFile(file, `guard-${index + 1}`)));
   const [summaryFiles, setSummaryFiles] = useState([createPreviewFile(sampleSummaryFile, "summary-1")]);
   const [guardSubmitState, setGuardSubmitState] = useState("idle");
   const [summarySubmitState, setSummarySubmitState] = useState("idle");
-  const [activeTab, setActiveTab] = useState("Dashboard");
+  const [activeTab, setActiveTab] = useState(() => readPreviewActiveTab());
   const [guardDragOver, setGuardDragOver] = useState(false);
   const [summaryDragOver, setSummaryDragOver] = useState(false);
   const [reviewFocus, setReviewFocus] = useState(null);
   const [dispatchReady, setDispatchReady] = useState(false);
   const [showDispatchModal, setShowDispatchModal] = useState(false);
-  const [dispatchMode, setDispatchMode] = useState("single");
-  const [courier, setCourier] = useState(courierOptions[0]);
-  const [trackingNumber, setTrackingNumber] = useState("LBC-124773284109");
+  const [dispatchMode, setDispatchMode] = useState(() => readUploadWorkspace().dispatchMode);
+  const [courier, setCourier] = useState(() => readUploadWorkspace().courier);
+  const [trackingNumber, setTrackingNumber] = useState(() => readUploadWorkspace().trackingNumber);
   const [dispatchSuccessMessage, setDispatchSuccessMessage] = useState("");
+  const [previewToastMessage, setPreviewToastMessage] = useState("");
   const [dashboardSeedRows, setDashboardSeedRows] = useState(mockPendingDashboardRows);
   const [dashboardRows, setDashboardRows] = useState(mockPendingDashboardRows);
   const [dashboardRecentActivity, setDashboardRecentActivity] = useState(mockRecentActivity);
@@ -1142,8 +1659,121 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState("");
   const [dashboardLastSyncedAt, setDashboardLastSyncedAt] = useState(null);
+  const [summaryDocuments, setSummaryDocuments] = useState([]);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [printPreviewRow, setPrintPreviewRow] = useState(null);
+  const [presentationSettings, setPresentationSettings] = useState(() => readPreviewSettings());
+  const [presentationModeEnabled, setPresentationModeEnabled] = useState(() => readPresentationModeEnabled());
+
+  const reportMetrics = useMemo(() => {
+    if (dashboardMode !== "live") {
+      return mockReports;
+    }
+
+    const totalGuards = guardRoster.length;
+    const submittedCount = guardRoster.filter((guard) => guard.status !== "Missing").length;
+    const missingCount = guardRoster.filter((guard) => guard.status === "Missing").length;
+    const correctionCount = guardRoster.filter((guard) => guard.status === "Needs Correction").length;
+    const completedDispatchCount = summaryDocuments.length;
+    const coverageRate = totalGuards ? Math.round((submittedCount / totalGuards) * 100) : 0;
+
+    return [
+      {
+        label: "Upload Rate",
+        value: `${coverageRate}%`,
+        copy: `${submittedCount} of ${totalGuards || 0} guards have a scoped submission signal`,
+      },
+      {
+        label: "Missing DTRs",
+        value: `${missingCount}`,
+        copy:
+          correctionCount > 0
+            ? `${correctionCount} guard${correctionCount === 1 ? "" : "s"} also need correction follow-up`
+            : "No additional correction queue right now",
+      },
+      {
+        label: "Summaries",
+        value: `${completedDispatchCount}`,
+        copy: `${completedDispatchCount} scoped summary upload${completedDispatchCount === 1 ? "" : "s"} recorded in Supabase`,
+      },
+    ];
+  }, [dashboardMode, guardRoster, summaryDocuments.length]);
+
+  const reportTrendPoints = useMemo(() => {
+    if (dashboardMode !== "live") {
+      return mockTrendPoints;
+    }
+
+    return buildReportTrendPoints(dashboardRows);
+  }, [dashboardMode, dashboardRows]);
+
+  const reportBranchHighlights = useMemo(() => {
+    if (dashboardMode !== "live") {
+      return mockReportHighlights;
+    }
+
+    return buildBranchHighlights(guardRoster);
+  }, [dashboardMode, guardRoster]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(previewSettingsStorageKey, JSON.stringify(presentationSettings));
+  }, [presentationSettings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(previewActiveTabStorageKey, activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(previewPresentationModeStorageKey, String(presentationModeEnabled));
+  }, [presentationModeEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(
+      previewUploadWorkspaceStorageKey,
+      JSON.stringify({
+        cutoff,
+        area,
+        branch,
+        courier,
+        trackingNumber,
+        dispatchMode,
+      }),
+    );
+  }, [area, branch, courier, cutoff, dispatchMode, trackingNumber]);
+
+  useEffect(() => {
+    if (isProductionMode && activeTab === "Upload") {
+      setActiveTab("Dashboard");
+    }
+  }, [activeTab, isProductionMode]);
+
+  useEffect(() => {
+    if (!previewToastMessage) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setPreviewToastMessage("");
+    }, 2200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [previewToastMessage]);
 
   const detailSummary = useMemo(() => `${cutoff}  |  ${area}  |  ${branch}`, [area, branch, cutoff]);
   const checklistItems = useMemo(
@@ -1234,6 +1864,7 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
         setDashboardRows((current) => mergeDashboardRowsWithLiveSeed(mockPendingDashboardRows, current));
         setDashboardRecentActivity(mockRecentActivity);
         setGuardRoster(mockGuards);
+        setSummaryDocuments([]);
         setDashboardLastSyncedAt(null);
         setDashboardLoading(false);
         return;
@@ -1241,7 +1872,7 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
 
       setDashboardLoading(true);
 
-      const [pendingResponse, recentResponse, profilesResponse] = await Promise.all([
+      const [pendingResponse, recentResponse, profilesResponse, summaryResponse] = await Promise.all([
         supabase
           .from("dtr_submissions")
           .select(
@@ -1261,6 +1892,14 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
           .from("profiles")
           .select("id,role,full_name,employee_id,position,shift,location,branch,created_at")
           .order("created_at", { ascending: false })
+          .limit(80),
+        supabase
+          .from("employee_documents")
+          .select(
+            "id,user_id,document_type,review_status,file_url,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(full_name,employee_id,location,branch,role)"
+          )
+          .ilike("document_type", "Weekly DTR Summary%")
+          .order("created_at", { ascending: false })
           .limit(40),
       ]);
 
@@ -1268,13 +1907,14 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
         return;
       }
 
-      if (pendingResponse.error || recentResponse.error || profilesResponse.error) {
+      if (pendingResponse.error || recentResponse.error || profilesResponse.error || summaryResponse.error) {
         setDashboardMode("mock");
         setDashboardError("Live dashboard data could not be loaded, so the preview is showing demo rows.");
         setDashboardSeedRows(mockPendingDashboardRows);
         setDashboardRows((current) => mergeDashboardRowsWithLiveSeed(mockPendingDashboardRows, current));
         setDashboardRecentActivity(mockRecentActivity);
         setGuardRoster(mockGuards);
+        setSummaryDocuments([]);
         setDashboardLastSyncedAt(null);
         setDashboardLoading(false);
         return;
@@ -1292,6 +1932,19 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
         profile.role === "supervisor"
           ? (profilesResponse.data ?? []).filter((item) => isScopedEmployee(item, profile))
           : (profilesResponse.data ?? []).filter((item) => item.role === "employee");
+      const scopedSummaryDocuments =
+        profile.role === "supervisor"
+          ? (summaryResponse.data ?? []).filter((row) => {
+              const documentProfile = row.profiles;
+              if (!documentProfile) {
+                return row.user_id === profile.id;
+              }
+
+              return documentProfile.role === "supervisor"
+                ? row.user_id === profile.id
+                : isScopedEmployee(documentProfile, profile);
+            })
+          : summaryResponse.data ?? [];
       const nextSeedRows = scopedRows.map(mapLiveSubmissionToDashboardRow);
       const latestSubmissionByUserId = new Map();
 
@@ -1313,6 +1966,7 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
           ? scopedProfiles.map((item) => mapProfileToGuard(item, latestSubmissionByUserId.get(item.id)))
           : mockGuards
       );
+      setSummaryDocuments(scopedSummaryDocuments);
       setDashboardLastSyncedAt(new Date().toISOString());
       setDashboardLoading(false);
     }
@@ -1328,6 +1982,8 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
     const realtimeChannel = supabase
       .channel(dashboardRealtimeChannelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, loadDashboardRows)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, loadDashboardRows)
+      .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, loadDashboardRows)
       .subscribe();
 
     return () => {
@@ -1349,6 +2005,20 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
   function addSummarySample() {
     setSummaryFiles([createPreviewFile({ ...sampleSummaryFile, source: "Demo sample" }, `summary-sample-${Date.now()}`)]);
     setSummarySubmitState("idle");
+  }
+
+  function restoreDemoSamples() {
+    [...guardFiles, ...summaryFiles].forEach((file) => {
+      if (file.previewUrl) {
+        URL.revokeObjectURL(file.previewUrl);
+      }
+    });
+
+    setGuardFiles(sampleGuardFiles.map((file, index) => createPreviewFile({ ...file, source: "Demo sample" }, `guard-restore-${index + 1}`)));
+    setSummaryFiles([createPreviewFile({ ...sampleSummaryFile, source: "Demo sample" }, `summary-restore-${Date.now()}`)]);
+    setGuardSubmitState("idle");
+    setSummarySubmitState("idle");
+    setPreviewToastMessage("Demo samples restored.");
   }
 
   function handleGuardFileChange(event) {
@@ -1495,24 +2165,93 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
           dashboardError={dashboardError}
           scopeLabel={getDashboardScopeLabel(profile)}
           lastSyncedAt={dashboardLastSyncedAt}
+          showLiveBadges={presentationSettings.showLiveBadges}
         />
       );
     }
 
     if (activeTab === "Guards") {
-      return <GuardsTab guards={guardRoster} dashboardMode={dashboardMode} scopeLabel={getDashboardScopeLabel(profile)} />;
+      return (
+        <GuardsTab
+          guards={guardRoster}
+          dashboardMode={dashboardMode}
+          scopeLabel={getDashboardScopeLabel(profile)}
+          dashboardLoading={dashboardLoading}
+          showLiveBadges={presentationSettings.showLiveBadges}
+        />
+      );
     }
 
     if (activeTab === "Reports") {
-      return <ReportsTab />;
+      return (
+        <ReportsTab
+          reportMetrics={reportMetrics}
+          trendPoints={reportTrendPoints}
+          branchHighlights={reportBranchHighlights}
+          dashboardMode={dashboardMode}
+          scopeLabel={getDashboardScopeLabel(profile)}
+          dashboardLoading={dashboardLoading}
+          showLiveBadges={presentationSettings.showLiveBadges}
+        />
+      );
     }
 
     if (activeTab === "Settings") {
-      return <SettingsTab />;
+      return (
+        <SettingsTab
+          presentationSettings={presentationSettings}
+          onToggleSetting={(key) => {
+            setPresentationModeEnabled(false);
+            setPresentationSettings((current) => ({
+              ...current,
+              [key]: !current[key],
+            }));
+          }}
+          onResetPreferences={() => {
+            const defaultSettings = {
+              compactMode: false,
+              animationsEnabled: true,
+              showLiveBadges: true,
+            };
+
+            setPresentationSettings(defaultSettings);
+            setActiveTab("Dashboard");
+            setPresentationModeEnabled(false);
+
+            if (typeof window !== "undefined") {
+              window.localStorage.removeItem(previewSettingsStorageKey);
+              window.localStorage.removeItem(previewActiveTabStorageKey);
+              window.localStorage.removeItem(guardsFilterStorageKey);
+              window.localStorage.removeItem(dashboardFilterStorageKey);
+              window.localStorage.removeItem(previewPresentationModeStorageKey);
+            }
+
+            setPreviewToastMessage("Preview preferences reset.");
+          }}
+        />
+      );
     }
 
     return (
       <>
+        <section className="cebuana-preview__upload-hero">
+          <article className="cebuana-preview__upload-hero-card cebuana-preview__upload-hero-card--primary">
+            <span>Upload workspace</span>
+            <strong>{detailSummary}</strong>
+            <p>{reviewFocus ? `${reviewFocus.guardName} is loaded for review in this cutoff batch.` : "Prepare guard DTR images and the weekly summary packet in one supervisor flow."}</p>
+          </article>
+          <article className="cebuana-preview__upload-hero-card">
+            <span>Files staged</span>
+            <strong>{guardFiles.length + summaryFiles.length}</strong>
+            <p>{guardFiles.length} DTR file{guardFiles.length === 1 ? "" : "s"} and {summaryFiles.length} summary item{summaryFiles.length === 1 ? "" : "s"} ready in the workspace.</p>
+          </article>
+          <article className="cebuana-preview__upload-hero-card">
+            <span>Checklist status</span>
+            <strong>{completedChecklistCount} / {checklistItems.length}</strong>
+            <p>{dispatchReady ? "Dispatch-ready context is already staged." : "Finish the right-side checklist before packaging the batch."}</p>
+          </article>
+        </section>
+
         <div className="cebuana-preview__upload-layout">
           <div className="cebuana-preview__upload-main">
             <UploadSection
@@ -1612,6 +2351,11 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
                   <DetailField label="Area" icon={MapPinned} value={area} options={areaOptions} onChange={setArea} />
                   <DetailField label="Branch Location" icon={Building2} value={branch} options={branchOptions} onChange={setBranch} />
                 </div>
+
+                <div className="cebuana-preview__upload-panel-note">
+                  <strong>Tablet review mode</strong>
+                  <p>Selections here anchor the full upload workflow, so supervisors can stage one clean packet before dispatch.</p>
+                </div>
               </section>
 
               <section className="cebuana-preview__checklist-card">
@@ -1679,7 +2423,11 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
   }
 
   return (
-    <div className="cebuana-preview">
+    <div
+      className={`cebuana-preview${
+        presentationSettings.compactMode ? " cebuana-preview--compact" : ""
+      }${presentationSettings.animationsEnabled ? "" : " cebuana-preview--reduced-motion"}`}
+    >
       <div className="cebuana-preview__backdrop" />
 
       <div className="cebuana-preview__phone-shell">
@@ -1699,7 +2447,14 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
                       key={label}
                       type="button"
                       className={`cebuana-preview__header-nav-item${active ? " cebuana-preview__header-nav-item--active" : ""}`}
-                      onClick={() => setActiveTab(label)}
+                      onClick={() => {
+                        if (isProductionMode && label === "Upload") {
+                          navigate("/cebuana/upload");
+                          return;
+                        }
+
+                        setActiveTab(label);
+                      }}
                     >
                       {label}
                     </button>
@@ -1708,9 +2463,38 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
               </nav>
             </div>
 
-            <div className="cebuana-preview__profile-pill">
-              <div className="cebuana-preview__avatar">S</div>
-              <span>Supervisor</span>
+            <div className="cebuana-preview__topbar-actions">
+              <button
+                type="button"
+                className={`cebuana-preview__topbar-pill${
+                  presentationModeEnabled ? " cebuana-preview__topbar-pill--active" : ""
+                }`}
+                onClick={() => {
+                  const nextPresentationMode = !presentationModeEnabled;
+
+                  setPresentationSettings((current) => ({
+                    ...current,
+                    compactMode: false,
+                    animationsEnabled: nextPresentationMode ? false : true,
+                    showLiveBadges: nextPresentationMode ? false : true,
+                  }));
+                  setPresentationModeEnabled(nextPresentationMode);
+                  setShowDispatchModal(false);
+                  setShowPrintPreview(false);
+                  setDispatchSuccessMessage("");
+                  setPreviewToastMessage(nextPresentationMode ? "Presentation mode enabled." : "Presentation mode off.");
+                }}
+              >
+                <SlidersHorizontal size={15} />
+                <span>Presentation mode</span>
+              </button>
+
+              <div className="cebuana-preview__profile-pill">
+                <div className="cebuana-preview__avatar">
+                  {(profile?.full_name || profile?.role || "S").charAt(0).toUpperCase()}
+                </div>
+                <span>{profile?.role ? `${profile.role.charAt(0).toUpperCase()}${profile.role.slice(1)}` : "Supervisor"}</span>
+              </div>
             </div>
           </header>
 
@@ -1721,12 +2505,26 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
                 <p>
                   {activeTab === "Dashboard" &&
                     (dashboardMode === "live"
-                      ? "Cebuana dashboard preview with real Supabase DTR data for the current signed-in scope."
+                      ? isProductionMode
+                        ? "Cebuana operations dashboard with live Supabase DTR data for the current signed-in scope."
+                        : "Cebuana dashboard preview with real Supabase DTR data for the current signed-in scope."
                       : "Cebuana dashboard preview in presentation mode, ready to switch to live data when an admin or supervisor signs in.")}
-                  {activeTab === "Guards" && "Mock guard roster for tracking submission status by branch."}
-                  {activeTab === "Upload" && "Standalone interactive upload preview for testing the Cebuana supervisor workflow."}
-                  {activeTab === "Reports" && "Preview-only reporting tab for compliance and submission trends."}
-                  {activeTab === "Settings" && "Mock settings tab for supervisor workflow preferences."}
+                  {activeTab === "Guards" &&
+                    (dashboardMode === "live"
+                      ? "Scoped guard roster with live submission coverage and current branch status."
+                      : "Mock guard roster for tracking submission status by branch.")}
+                  {activeTab === "Upload" &&
+                    (isProductionMode
+                      ? "Launch the dedicated Cebuana upload workspace to submit real DTR packets and weekly summaries."
+                      : "Premium tablet upload workspace for staging guard DTR packets and weekly summaries.")}
+                  {activeTab === "Reports" &&
+                    (dashboardMode === "live"
+                      ? "Scoped report cards and trend summaries generated from live Supabase data."
+                      : "Presentation-ready reporting tab for compliance and submission trends.")}
+                  {activeTab === "Settings" &&
+                    (isProductionMode
+                      ? "Local Cebuana workspace preferences for the live operations experience."
+                      : "Mock settings tab for supervisor workflow preferences.")}
                 </p>
               </div>
 
@@ -1742,19 +2540,60 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
 
             <div className="cebuana-preview__demo-banner">
               <div>
-                <strong>{dashboardMode === "live" ? "Connected preview mode" : "Interactive demo mode"}</strong>
-                <span>
-                  {activeTab === "Upload"
-                    ? "Selections and uploads are local to this preview only."
+                <strong>
+                  {isProductionMode
+                    ? dashboardMode === "live"
+                      ? presentationSettings.showLiveBadges
+                        ? "Connected production workspace"
+                        : "Connected workspace"
+                      : "Cebuana live route"
                     : dashboardMode === "live"
-                      ? "Dashboard counts and pending rows are coming from Supabase, while the dispatch flow remains safely mocked."
+                      ? presentationSettings.showLiveBadges
+                        ? "Connected preview mode"
+                        : "Connected preview"
+                      : "Interactive demo mode"}
+                </strong>
+                <span>
+                  {isProductionMode
+                    ? dashboardMode === "live"
+                      ? "Dashboard, Guards, and Reports are reading real scoped data, while Upload now lives on the dedicated Cebuana route."
+                      : !isSupabaseConfigured
+                        ? "Supabase is not configured yet, so this production shell cannot connect to live operational data."
+                        : !isPrivilegedViewer
+                          ? "Sign in as an admin or supervisor to open the live Cebuana operations workspace."
+                          : "The live shell is ready, but scoped data could not be loaded right now."
+                    : activeTab === "Upload"
+                      ? "Uploads and dispatch steps are still preview-safe, but the workspace now mirrors the premium tablet hierarchy."
+                      : dashboardMode === "live"
+                      ? presentationSettings.showLiveBadges
+                        ? "Dashboard counts and pending rows are coming from Supabase, while the dispatch flow remains safely mocked."
+                        : "Live Supabase data is still connected here, with the visual live badges hidden for a cleaner presentation."
                       : "This tab is mock-only and stays separate from the rest of the app."}
                 </span>
               </div>
-              <button type="button" className="cebuana-preview__demo-reset" onClick={resetDemo}>
-                <RotateCcw size={16} />
-                Reset
-              </button>
+              <div className="cebuana-preview__demo-actions">
+                {isProductionMode ? (
+                  <button
+                    type="button"
+                    className="cebuana-preview__demo-reset"
+                    onClick={() => navigate("/cebuana/upload")}
+                  >
+                    <Upload size={16} />
+                    Open live upload
+                  </button>
+                ) : (
+                  <>
+                    <button type="button" className="cebuana-preview__demo-reset cebuana-preview__demo-reset--soft" onClick={restoreDemoSamples}>
+                      <Upload size={16} />
+                      Restore demo samples
+                    </button>
+                    <button type="button" className="cebuana-preview__demo-reset" onClick={resetDemo}>
+                      <RotateCcw size={16} />
+                      Reset
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             {dispatchSuccessMessage ? (
@@ -1763,7 +2602,15 @@ export default function CebuanaUploadPreviewPage({ profile = null }) {
                 <span>{dispatchSuccessMessage}</span>
               </div>
             ) : null}
-            {renderActiveTab()}
+            {previewToastMessage ? (
+              <div className="cebuana-preview__preview-toast" role="status">
+                <CheckCircle2 size={15} />
+                <span>{previewToastMessage}</span>
+              </div>
+            ) : null}
+            <div key={activeTab} className="cebuana-preview__tab-stage">
+              {renderActiveTab()}
+            </div>
           </main>
 
           {showDispatchModal ? (

@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
@@ -20,10 +20,24 @@ const SupervisorDashboardHome = lazy(() => import("./features/supervisor/Supervi
 const SupervisorDtrPage = lazy(() => import("./features/supervisor/SupervisorDtrPage"));
 const SupervisorTeamPage = lazy(() => import("./features/supervisor/SupervisorTeamPage"));
 const SupervisorSettingsPage = lazy(() => import("./features/supervisor/SupervisorSettingsPage"));
-const CebuanaUploadPreviewPage = lazy(() => import("./features/showcase/CebuanaUploadPreviewPage"));
 
 export default function App() {
   const { user, profile, loading, authError, refreshProfile, resetSession } = useAuth();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const cleanupMarkerKey = "showcase-cleanup-2026-04-08";
+    if (window.localStorage.getItem(cleanupMarkerKey)) return;
+
+    [
+      "cebuana-preview-active-tab",
+      "cebuana-preview-settings",
+      "cebuana-preview-upload-workspace",
+    ].forEach((key) => window.localStorage.removeItem(key));
+
+    window.localStorage.setItem(cleanupMarkerKey, "done");
+  }, []);
 
   return (
     <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading module...</div>}>
@@ -31,7 +45,6 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/:portalType" element={<LoginPage />} />
         <Route path="/reset-password/:portalType" element={<ResetPasswordPage />} />
-        <Route path="/cebuana-preview" element={<CebuanaUploadPreviewPage profile={profile} />} />
         <Route
           path="/onboarding"
           element={<OnboardingPage user={user} profile={profile} refreshProfile={refreshProfile} />}

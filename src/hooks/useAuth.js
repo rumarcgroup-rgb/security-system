@@ -26,7 +26,7 @@ export function useAuth() {
 
     async function recoverInvalidSession() {
       clearStoredSupabaseAuth();
-      await supabase.auth.signOut().catch(() => {});
+      await supabase?.auth.signOut().catch(() => {});
       if (!mounted) return;
       setSession(null);
       setProfile(null);
@@ -106,6 +106,12 @@ export function useAuth() {
 
     init();
 
+    if (!isSupabaseConfigured || !supabase) {
+      return () => {
+        mounted = false;
+      };
+    }
+
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       window.setTimeout(() => {
         void syncSessionState(nextSession);
@@ -120,6 +126,11 @@ export function useAuth() {
   }, []);
 
   async function fetchProfile(userId) {
+    if (!supabase) {
+      setProfile(null);
+      return null;
+    }
+
     const { data, error } = await supabase
       .from("profiles")
       .select("*")

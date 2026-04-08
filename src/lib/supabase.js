@@ -9,4 +9,4 @@ if (!isSupabaseConfigured) {
   console.warn("Supabase environment variables are missing.");
 }
 
-export const supabase = createClient(supabaseUrl ?? "", supabaseAnonKey ?? "");
+export const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
