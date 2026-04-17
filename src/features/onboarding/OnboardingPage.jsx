@@ -21,7 +21,7 @@ const steps = [
   "Terms & Signature",
 ];
 
-const docTypes = ["Valid ID", "NBI Clearance", "Medical Certificate", "Barangay Clearance"];
+const docTypes = ["License", "Valid ID", "NBI Clearance", "Medical Certificate", "Barangay Clearance"];
 const PENDING_SIGNUP_STORAGE_KEY = "pending-onboarding-signup";
 
 function getPendingSignup() {

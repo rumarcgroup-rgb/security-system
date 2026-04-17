@@ -3,8 +3,11 @@ import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabase";
 import {
   MESSAGE_THREAD_MESSAGE_SELECT,
+  buildSeenReceiptLabel,
+  buildTypingLabel,
   getLatestMessage,
   getPreferredEmployeeThread,
+  getThreadParticipantRole,
   getThreadReadState,
   isThreadUnread,
   normalizeMessageSenderRole,
@@ -14,6 +17,9 @@ import { useMessageThreadRealtime } from "./messageThreadRealtimeStore";
 const RECOVERY_POLL_MS = 3000;
 const RECONNECT_WATCHDOG_MS = 6000;
 const PENDING_RECONCILIATION_MS = 4000;
+const TYPING_EVENT_NAME = "typing";
+const TYPING_EXPIRY_MS = 3000;
+const TYPING_BROADCAST_THROTTLE_MS = 1200;
 
 function sortMessages(messages = []) {
   return [...messages].sort((left, right) => new Date(left.created_at || 0) - new Date(right.created_at || 0));
@@ -72,16 +78,29 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [escalatingThreadId, setEscalatingThreadId] = useState(null);
+  const [deescalatingThreadId, setDeescalatingThreadId] = useState(null);
+  const [editingMessageId, setEditingMessageId] = useState(null);
   const [resolvingThreadId, setResolvingThreadId] = useState(null);
   const [messageConnectionState, setMessageConnectionState] = useState("connecting");
   const [lastMessageSyncedAt, setLastMessageSyncedAt] = useState(null);
   const [messageChannelEpoch, setMessageChannelEpoch] = useState(0);
+  const [typingParticipants, setTypingParticipants] = useState([]);
   const activeThreadIdRef = useRef(null);
+  const activeThreadChannelRef = useRef(null);
   const messageConnectionStateRef = useRef("connecting");
   const messageRestartAttemptsRef = useRef(0);
   const messageReconnectWatchdogRef = useRef(null);
   const pendingMessagesRef = useRef(new Map());
   const pendingMessageTimersRef = useRef(new Map());
+  const typingParticipantsMapRef = useRef(new Map());
+  const typingParticipantTimersRef = useRef(new Map());
+  const composerTypingRef = useRef({
+    draftText: "",
+    hasFocus: false,
+    isTyping: false,
+    lastSentAt: 0,
+    threadId: null,
+  });
 
   const threads = threadRealtime.threads;
   const threadsLoading = threadRealtime.threadsLoading;
@@ -104,6 +123,83 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
 
     window.clearTimeout(timerId);
     pendingMessageTimersRef.current.delete(messageId);
+  }
+
+  function commitTypingParticipants() {
+    const nextTypingParticipants = [...typingParticipantsMapRef.current.values()].sort((left, right) => {
+      const roleOrder = {
+        employee: 0,
+        supervisor: 1,
+        admin: 2,
+      };
+
+      if ((roleOrder[left.role] ?? 99) !== (roleOrder[right.role] ?? 99)) {
+        return (roleOrder[left.role] ?? 99) - (roleOrder[right.role] ?? 99);
+      }
+
+      return new Date(right.updatedAt || 0) - new Date(left.updatedAt || 0);
+    });
+
+    setTypingParticipants(nextTypingParticipants);
+  }
+
+  function clearTypingParticipantTimer(userId) {
+    const timerId = typingParticipantTimersRef.current.get(userId);
+    if (!timerId || typeof window === "undefined") return;
+
+    window.clearTimeout(timerId);
+    typingParticipantTimersRef.current.delete(userId);
+  }
+
+  function removeTypingParticipant(userId) {
+    if (!userId) return;
+
+    clearTypingParticipantTimer(userId);
+    if (!typingParticipantsMapRef.current.has(userId)) return;
+
+    typingParticipantsMapRef.current.delete(userId);
+    commitTypingParticipants();
+  }
+
+  function resetTypingParticipants() {
+    typingParticipantTimersRef.current.forEach((timerId) => {
+      if (typeof window !== "undefined") {
+        window.clearTimeout(timerId);
+      }
+    });
+    typingParticipantTimersRef.current.clear();
+    typingParticipantsMapRef.current.clear();
+    setTypingParticipants([]);
+  }
+
+  function applyTypingPayload(payload) {
+    const nextPayload = payload?.payload || payload || {};
+    const senderUserId = nextPayload.userId || null;
+    const targetThreadId = nextPayload.threadId || null;
+    const senderRole = normalizeMessageSenderRole(nextPayload.role);
+
+    if (!senderUserId || !targetThreadId || senderUserId === currentUserId) return;
+    if (targetThreadId !== activeThreadIdRef.current) return;
+
+    if (!nextPayload.isTyping) {
+      removeTypingParticipant(senderUserId);
+      return;
+    }
+
+    typingParticipantsMapRef.current.set(senderUserId, {
+      userId: senderUserId,
+      role: senderRole,
+      updatedAt: new Date().toISOString(),
+    });
+    commitTypingParticipants();
+
+    if (typeof window !== "undefined") {
+      clearTypingParticipantTimer(senderUserId);
+      const timerId = window.setTimeout(() => {
+        removeTypingParticipant(senderUserId);
+      }, TYPING_EXPIRY_MS);
+      typingParticipantTimersRef.current.set(senderUserId, timerId);
+    }
   }
 
   function getPendingMessages(threadId) {
@@ -130,6 +226,83 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
 
     pendingMessagesRef.current.set(threadId, nextPendingMessages);
   }
+
+  const broadcastTypingState = useCallback(
+    async (nextIsTyping, threadId = activeThreadIdRef.current) => {
+      const channel = activeThreadChannelRef.current;
+      const normalizedThreadId = threadId || null;
+      const normalizedRole = normalizeMessageSenderRole(currentRole);
+
+      composerTypingRef.current.threadId = normalizedThreadId;
+
+      if (!normalizedThreadId || !currentUserId) {
+        composerTypingRef.current.isTyping = false;
+        return;
+      }
+
+      if (!channel || messageConnectionStateRef.current !== "live") {
+        composerTypingRef.current.isTyping = false;
+        return;
+      }
+
+      const now = Date.now();
+      if (
+        nextIsTyping &&
+        composerTypingRef.current.isTyping &&
+        now - composerTypingRef.current.lastSentAt < TYPING_BROADCAST_THROTTLE_MS
+      ) {
+        return;
+      }
+
+      composerTypingRef.current.isTyping = nextIsTyping;
+      composerTypingRef.current.lastSentAt = now;
+
+      try {
+        await channel.send({
+          type: "broadcast",
+          event: TYPING_EVENT_NAME,
+          payload: {
+            isTyping: nextIsTyping,
+            role: normalizedRole,
+            threadId: normalizedThreadId,
+            userId: currentUserId,
+          },
+        });
+      } catch {
+        if (!nextIsTyping) {
+          composerTypingRef.current.isTyping = false;
+        }
+      }
+    },
+    [currentRole, currentUserId]
+  );
+
+  const setComposerTyping = useCallback(
+    ({ draftText = "", hasFocus = false } = {}) => {
+      const normalizedDraftText = draftText;
+      const shouldBroadcastTyping = Boolean(activeThreadIdRef.current && hasFocus && normalizedDraftText.trim());
+
+      composerTypingRef.current = {
+        ...composerTypingRef.current,
+        draftText: normalizedDraftText,
+        hasFocus: Boolean(hasFocus),
+        threadId: activeThreadIdRef.current,
+      };
+
+      if (shouldBroadcastTyping) {
+        void broadcastTypingState(true, activeThreadIdRef.current);
+        return;
+      }
+
+      if (composerTypingRef.current.isTyping) {
+        void broadcastTypingState(false, composerTypingRef.current.threadId || activeThreadIdRef.current);
+        return;
+      }
+
+      composerTypingRef.current.isTyping = false;
+    },
+    [broadcastTypingState]
+  );
 
   const markPendingMessageFailed = useCallback((threadId, optimisticMessageId) => {
     if (!threadId || !optimisticMessageId) return;
@@ -233,6 +406,7 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
 
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId;
+    composerTypingRef.current.threadId = activeThreadId;
   }, [activeThreadId]);
 
   useEffect(() => {
@@ -255,6 +429,7 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
         }
       });
       pendingMessageTimersRef.current.clear();
+      resetTypingParticipants();
     };
   }, []);
 
@@ -282,6 +457,9 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
       setActiveMessages([]);
       setMessagesLoading(false);
       clearMessageReconnectWatchdog();
+      activeThreadChannelRef.current = null;
+      resetTypingParticipants();
+      composerTypingRef.current.isTyping = false;
       return undefined;
     }
 
@@ -308,7 +486,14 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
     }
 
     function handleVisibilityBackfill() {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        resetTypingParticipants();
+        if (composerTypingRef.current.isTyping) {
+          void broadcastTypingState(false, activeThreadId);
+        }
+        return;
+      }
+
       updateMessageConnectionState(messageConnectionStateRef.current === "live" ? "live" : "reconnecting");
       void syncMessages(activeThreadId, { showLoading: false });
     }
@@ -320,10 +505,11 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
 
     messageConnectionStateRef.current = "connecting";
     setMessageConnectionState("connecting");
+    resetTypingParticipants();
     void syncMessages(activeThreadId, { showLoading: true });
 
     const channel = supabase
-      .channel(`message-active-thread-${currentRole}-${currentUserId}-${activeThreadId}-${messageChannelEpoch}`)
+      .channel(`message-thread-room-${activeThreadId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "message_messages", filter: activeThreadFilter }, (payload) => {
         if (payload.eventType === "DELETE") {
           const deletedMessageId = payload.old?.id;
@@ -345,21 +531,33 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
         );
         setLastMessageSyncedAt(new Date().toISOString());
       })
+      .on("broadcast", { event: TYPING_EVENT_NAME }, (payload) => {
+        applyTypingPayload(payload);
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           messageRestartAttemptsRef.current = 0;
           clearMessageReconnectWatchdog();
+          activeThreadChannelRef.current = channel;
+          resetTypingParticipants();
           updateMessageConnectionState("live");
           void syncMessages(activeThreadId, { showLoading: false });
+          if (composerTypingRef.current.hasFocus && composerTypingRef.current.draftText.trim()) {
+            void broadcastTypingState(true, activeThreadId);
+          }
           return;
         }
 
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          activeThreadChannelRef.current = null;
+          resetTypingParticipants();
+          composerTypingRef.current.isTyping = false;
           updateMessageConnectionState("reconnecting");
           scheduleMessageReconnectWatchdog();
           return;
         }
 
+        activeThreadChannelRef.current = null;
         updateMessageConnectionState("connecting");
         scheduleMessageReconnectWatchdog();
       });
@@ -374,6 +572,21 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
 
     return () => {
       clearMessageReconnectWatchdog();
+      if (composerTypingRef.current.isTyping) {
+        void channel.send({
+          type: "broadcast",
+          event: TYPING_EVENT_NAME,
+          payload: {
+            isTyping: false,
+            role: normalizeMessageSenderRole(currentRole),
+            threadId: activeThreadId,
+            userId: currentUserId,
+          },
+        });
+      }
+      composerTypingRef.current.isTyping = false;
+      activeThreadChannelRef.current = null;
+      resetTypingParticipants();
       supabase.removeChannel(channel);
       if (typeof window !== "undefined") {
         window.removeEventListener("online", handleOnlineBackfill);
@@ -382,7 +595,7 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
         document.removeEventListener("visibilitychange", handleVisibilityBackfill);
       }
     };
-  }, [activeThreadId, currentRole, currentUserId, messageChannelEpoch, syncMessages]);
+  }, [activeThreadId, broadcastTypingState, currentRole, currentUserId, messageChannelEpoch, syncMessages]);
 
   const activeThread = useMemo(() => {
     return threads.find((thread) => thread.id === activeThreadId) || null;
@@ -407,6 +620,53 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
   const lastSyncedAt = useMemo(() => {
     return lastMessageSyncedAt || threadRealtime.lastSyncedAt || null;
   }, [lastMessageSyncedAt, threadRealtime.lastSyncedAt]);
+
+  const messageSeenReceipts = useMemo(() => {
+    if (!activeThread || !currentUserId) return {};
+
+    const useRoleLabel = activeThread.escalated_to_admin || !activeThread.supervisor_user_id;
+    const receiptCandidates = (activeThread.read_states || [])
+      .filter((readState) => readState.user_id && readState.user_id !== currentUserId && readState.last_read_at)
+      .map((readState) => ({
+        ...readState,
+        role: getThreadParticipantRole(activeThread, readState.user_id),
+      }));
+
+    return activeMessages.reduce((receiptMap, message) => {
+      if (!message?.id || message.localStatus || message.sender_user_id !== currentUserId || !message.created_at) {
+        return receiptMap;
+      }
+
+      const latestReceipt = receiptCandidates
+        .filter((readState) => new Date(readState.last_read_at) >= new Date(message.created_at))
+        .sort((left, right) => new Date(right.last_read_at || 0) - new Date(left.last_read_at || 0))[0];
+
+      if (!latestReceipt) {
+        return receiptMap;
+      }
+
+      receiptMap[message.id] = {
+        label: buildSeenReceiptLabel(latestReceipt.role, { useRoleLabel }),
+        readAt: latestReceipt.last_read_at,
+        role: latestReceipt.role,
+      };
+      return receiptMap;
+    }, {});
+  }, [activeMessages, activeThread, currentUserId]);
+
+  const editableMessageId = useMemo(() => {
+    if (!currentUserId) return null;
+
+    return (
+      [...activeMessages]
+        .reverse()
+        .find((message) => !message.localStatus && message.sender_user_id === currentUserId)?.id || null
+    );
+  }, [activeMessages, currentUserId]);
+
+  const activeTypingLabel = useMemo(() => {
+    return buildTypingLabel(typingParticipants.map((participant) => participant.role));
+  }, [typingParticipants]);
 
   useEffect(() => {
     if (!activeThreadId || connectionState === "live" || typeof window === "undefined") {
@@ -514,6 +774,11 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
         return false;
       }
 
+      if (composerTypingRef.current.isTyping) {
+        void broadcastTypingState(false, targetThreadId);
+      }
+      composerTypingRef.current.draftText = "";
+
       optimisticMessage = buildOptimisticMessage({
         body: trimmedBody,
         currentRole,
@@ -592,6 +857,54 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
     }
   }
 
+  async function deescalateThread(threadId = activeThreadId) {
+    if (!threadId || currentRole !== "employee") return false;
+
+    setDeescalatingThreadId(threadId);
+    try {
+      const { error } = await supabase.rpc("employee_deescalate_message_thread", {
+        target_thread_id: threadId,
+      });
+      if (error) throw error;
+
+      toast.success("Admin escalation turned off.");
+      await threadRealtime.syncNow({ showLoading: false });
+      return true;
+    } catch (error) {
+      toast.error(error.message || "Unable to turn off admin escalation.");
+      return false;
+    } finally {
+      setDeescalatingThreadId(null);
+    }
+  }
+
+  async function editMessage(targetMessageId, nextBody) {
+    const trimmedBody = nextBody.trim();
+    if (!targetMessageId || !trimmedBody) return false;
+
+    setEditingMessageId(targetMessageId);
+    try {
+      const { data, error } = await supabase.rpc("edit_message", {
+        target_message_id: targetMessageId,
+        next_body: trimmedBody,
+      });
+      if (error) throw error;
+
+      if (data?.id) {
+        setActiveMessages((current) =>
+          sortMessages(current.map((message) => (message.id === data.id ? { ...message, ...data } : message)))
+        );
+      }
+
+      return true;
+    } catch (error) {
+      toast.error(error.message || "Unable to edit this message.");
+      return false;
+    } finally {
+      setEditingMessageId(null);
+    }
+  }
+
   async function resolveThread(threadId = activeThreadId) {
     if (!threadId || !["supervisor", "admin"].includes(currentRole)) return false;
 
@@ -617,23 +930,32 @@ export function useMessageThreadInbox({ currentRole, currentUserId, preferredSup
     activeMessages,
     activeThread,
     activeThreadId,
+    activeTypingLabel,
     activeThreadUnread,
     connectionState,
+    deescalateThread,
+    deescalatingThreadId,
+    editableMessageId,
+    editMessage,
+    editingMessageId,
     ensureEmployeeThread,
     escalateThread,
     escalatingThreadId,
     lastSyncedAt,
     loadThreads: threadRealtime.syncNow,
+    messageSeenReceipts,
     markThreadRead,
     messagesLoading,
     resolveThread,
     resolvingThreadId,
     sendingMessage,
     sendMessage,
+    setComposerTyping,
     setActiveThreadId,
     syncNow,
     threads,
     threadsLoading,
+    typingParticipants,
     unreadCount,
   };
 }

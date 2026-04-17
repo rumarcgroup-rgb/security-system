@@ -10,6 +10,7 @@ export default function SupervisorMessagesPage({ profile }) {
   return (
     <MessageThreadInboxPanel
       activeMessages={inbox.activeMessages}
+      activeTypingLabel={inbox.activeTypingLabel}
       activeThread={inbox.activeThread}
       activeThreadId={inbox.activeThreadId}
       activeThreadUnread={inbox.activeThreadUnread}
@@ -17,8 +18,13 @@ export default function SupervisorMessagesPage({ profile }) {
       currentRole="supervisor"
       currentUserId={profile?.id}
       description="Instant guard threads from your assigned team appear here."
+      editableMessageId={inbox.editableMessageId}
+      editingMessageId={inbox.editingMessageId}
       lastSyncedAt={inbox.lastSyncedAt}
+      messageSeenReceipts={inbox.messageSeenReceipts}
       messagesLoading={inbox.messagesLoading}
+      onComposerTyping={inbox.setComposerTyping}
+      onEditMessage={inbox.editMessage}
       onMarkThreadRead={inbox.markThreadRead}
       onResolveThread={inbox.resolveThread}
       onSelectThread={inbox.setActiveThreadId}

@@ -93,6 +93,7 @@ create table if not exists public.message_messages (
   sender_user_id uuid not null references public.profiles(id) on delete cascade,
   sender_role text not null default 'employee',
   body text not null,
+  edited_at timestamptz,
   created_at timestamptz default now()
 );
 
@@ -189,6 +190,9 @@ alter table public.message_messages
 
 alter table public.message_messages
   add column if not exists body text;
+
+alter table public.message_messages
+  add column if not exists edited_at timestamptz;
 
 alter table public.message_read_states
   add column if not exists last_read_message_id uuid;
@@ -696,6 +700,36 @@ begin
 end;
 $$;
 
+create or replace function public.sync_message_thread_after_message_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  latest_message_id uuid;
+begin
+  if coalesce(new.body, '') = coalesce(old.body, '') then
+    return new;
+  end if;
+
+  select id
+  into latest_message_id
+  from public.message_messages
+  where thread_id = new.thread_id
+  order by created_at desc, id desc
+  limit 1;
+
+  if latest_message_id = new.id then
+    update public.message_threads
+    set last_message_preview = left(new.body, 140)
+    where id = new.thread_id;
+  end if;
+
+  return new;
+end;
+$$;
+
 drop trigger if exists message_messages_assign_sender_role on public.message_messages;
 create trigger message_messages_assign_sender_role
 before insert on public.message_messages
@@ -705,6 +739,78 @@ drop trigger if exists message_messages_sync_thread_after_insert on public.messa
 create trigger message_messages_sync_thread_after_insert
 after insert on public.message_messages
 for each row execute function public.sync_message_thread_after_message_insert();
+
+drop trigger if exists message_messages_sync_thread_after_update on public.message_messages;
+create trigger message_messages_sync_thread_after_update
+after update of body, edited_at on public.message_messages
+for each row execute function public.sync_message_thread_after_message_update();
+
+create or replace function public.edit_message(target_message_id uuid, next_body text)
+returns public.message_messages
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  updated_message public.message_messages;
+  latest_own_message_id uuid;
+  trimmed_body text;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required.';
+  end if;
+
+  trimmed_body := btrim(coalesce(next_body, ''));
+  if char_length(trimmed_body) = 0 then
+    raise exception 'Message cannot be empty.';
+  end if;
+
+  select *
+  into updated_message
+  from public.message_messages
+  where id = target_message_id;
+
+  if not found then
+    raise exception 'Message not found.';
+  end if;
+
+  if updated_message.sender_user_id <> auth.uid() then
+    raise exception 'You can only edit your own message.';
+  end if;
+
+  if not public.can_access_message_thread(updated_message.thread_id, auth.uid()) then
+    raise exception 'You do not have access to edit this message.';
+  end if;
+
+  select id
+  into latest_own_message_id
+  from public.message_messages
+  where thread_id = updated_message.thread_id
+    and sender_user_id = auth.uid()
+  order by created_at desc, id desc
+  limit 1;
+
+  if latest_own_message_id is distinct from target_message_id then
+    raise exception 'Only your latest message can be edited.';
+  end if;
+
+  if trimmed_body = btrim(coalesce(updated_message.body, '')) then
+    return updated_message;
+  end if;
+
+  update public.message_messages
+  set
+    body = trimmed_body,
+    edited_at = now()
+  where id = target_message_id
+  returning * into updated_message;
+
+  return updated_message;
+end;
+$$;
+
+revoke all on function public.edit_message(uuid, text) from public;
+grant execute on function public.edit_message(uuid, text) to authenticated, service_role;
 
 create or replace function public.employee_escalate_message_thread(target_thread_id uuid)
 returns public.message_threads
@@ -742,6 +848,45 @@ $$;
 
 revoke all on function public.employee_escalate_message_thread(uuid) from public;
 grant execute on function public.employee_escalate_message_thread(uuid) to authenticated, service_role;
+
+create or replace function public.employee_deescalate_message_thread(target_thread_id uuid)
+returns public.message_threads
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  next_thread public.message_threads;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.message_threads
+    where id = target_thread_id
+      and employee_user_id = auth.uid()
+      and supervisor_user_id is not null
+      and escalated_to_admin = true
+  ) then
+    raise exception 'You do not have access to turn off admin escalation for this thread.';
+  end if;
+
+  update public.message_threads
+  set
+    escalated_to_admin = false,
+    escalated_by_user_id = null,
+    escalated_at = null
+  where id = target_thread_id
+  returning * into next_thread;
+
+  return next_thread;
+end;
+$$;
+
+revoke all on function public.employee_deescalate_message_thread(uuid) from public;
+grant execute on function public.employee_deescalate_message_thread(uuid) to authenticated, service_role;
 
 create or replace function public.resolve_message_thread(target_thread_id uuid)
 returns public.message_threads
@@ -916,6 +1061,11 @@ drop policy if exists "admins_can_delete_messages" on public.message_messages;
 create policy "admins_can_delete_messages"
 on public.message_messages for delete
 using (public.is_admin(auth.uid()));
+
+drop policy if exists "message_thread_participants_can_select_read_states" on public.message_read_states;
+create policy "message_thread_participants_can_select_read_states"
+on public.message_read_states for select
+using (public.can_access_message_thread(thread_id, auth.uid()));
 
 drop policy if exists "users_can_manage_own_message_read_states" on public.message_read_states;
 create policy "users_can_manage_own_message_read_states"

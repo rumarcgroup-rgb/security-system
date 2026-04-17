@@ -1,0 +1,505 @@
+{
+  "title": "Website User Manual",
+  "audience": [
+    "employee",
+    "guard",
+    "janitor",
+    "cgroup-access",
+    "supervisor",
+    "admin"
+  ],
+  "language": "simple-english",
+  "sections": [
+    {
+      "id": "getting-started",
+      "title": "Getting Started",
+      "goal": "Help users choose the correct portal, sign in, reset passwords, and understand redirect behavior.",
+      "pages": [
+        {
+          "id": "portal-selector",
+          "label": "Portal Selector",
+          "route": "/login",
+          "role": "all",
+          "goal": "Choose the correct portal before logging in.",
+          "steps": [
+            "Open the login page.",
+            "Choose CGroup Access, Security Guard, Janitor, or Admin Login.",
+            "Continue to the matching login form."
+          ],
+          "warnings": [
+            "Use the correct portal for your role."
+          ],
+          "screenshotKeys": [
+            "portal-selector-overview.png"
+          ]
+        },
+        {
+          "id": "staff-login",
+          "label": "Staff Login",
+          "route": "/login/:portalType",
+          "role": "employee",
+          "goal": "Sign in from the correct staff portal.",
+          "steps": [
+            "Open your portal login page.",
+            "Enter your email and password.",
+            "Click Login."
+          ],
+          "warnings": [
+            "The Janitor portal labels the first field as Employee ID, but the same sign-in flow is used."
+          ],
+          "screenshotKeys": [
+            "security-guard-login.png",
+            "janitor-login.png"
+          ]
+        },
+        {
+          "id": "admin-login",
+          "label": "Admin Login",
+          "route": "/login/admin",
+          "role": "admin",
+          "goal": "Sign in to the admin portal with an admin account.",
+          "steps": [
+            "Enter admin email.",
+            "Enter password.",
+            "Click Login."
+          ],
+          "warnings": [
+            "Non-admin accounts are denied access and signed out."
+          ],
+          "screenshotKeys": [
+            "admin-login.png"
+          ]
+        },
+        {
+          "id": "forgot-password",
+          "label": "Forgot Password",
+          "route": "/reset-password/:portalType",
+          "role": "all",
+          "goal": "Reset the password for the correct portal account.",
+          "steps": [
+            "Open the portal-specific reset page.",
+            "Request the reset link.",
+            "Finish password recovery from the email link."
+          ],
+          "warnings": [
+            "Use the reset page that matches the portal you normally use."
+          ],
+          "screenshotKeys": [
+            "reset-password-request.png"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "onboarding",
+      "title": "Onboarding",
+      "goal": "Guide first-time users through account setup, profile creation, document upload, and signature submission.",
+      "pages": [
+        {
+          "id": "onboarding-overview",
+          "label": "Employee Onboarding",
+          "route": "/onboarding",
+          "role": "employee",
+          "goal": "Create or complete the employee profile.",
+          "steps": [
+            "Complete account setup.",
+            "Fill personal and government details.",
+            "Add employment details.",
+            "Upload documents.",
+            "Accept terms and sign.",
+            "Submit registration."
+          ],
+          "warnings": [
+            "If email confirmation is pending, the user must confirm first and then continue."
+          ],
+          "screenshotKeys": [
+            "onboarding-step-progress.png",
+            "onboarding-upload-documents.png",
+            "onboarding-terms-signature.png"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "guard-employee-guide",
+      "title": "Guard / Employee Guide",
+      "goal": "Explain the shared employee-style dashboard used by Security Guard, Janitor, and CGroup Access staff.",
+      "pages": [
+        {
+          "id": "employee-dashboard",
+          "label": "Dashboard",
+          "route": "/",
+          "role": "employee",
+          "goal": "Review profile, assignment, feedback, and recent submissions.",
+          "steps": [
+            "Open Dashboard.",
+            "Check assignment details and summary cards.",
+            "Review recent admin feedback and submissions."
+          ],
+          "warnings": [],
+          "screenshotKeys": [
+            "employee-dashboard-home.png"
+          ]
+        },
+        {
+          "id": "employee-documents",
+          "label": "Documents",
+          "route": "/",
+          "role": "employee",
+          "goal": "Review requirements and upload replacements when needed.",
+          "steps": [
+            "Open Documents.",
+            "Preview a requirement.",
+            "Upload a replacement if the file needs action."
+          ],
+          "warnings": [
+            "Signature updates can use drawing or image upload."
+          ],
+          "screenshotKeys": [
+            "employee-documents-view.png"
+          ]
+        },
+        {
+          "id": "employee-submit-dtr",
+          "label": "Submit DTR",
+          "route": "/",
+          "role": "employee",
+          "goal": "Upload a DTR image for a selected cutoff.",
+          "steps": [
+            "Open Submit DTR.",
+            "Choose a cutoff.",
+            "Upload the DTR image.",
+            "Add a note if needed.",
+            "Submit."
+          ],
+          "warnings": [],
+          "screenshotKeys": [
+            "employee-submit-dtr.png"
+          ]
+        },
+        {
+          "id": "employee-messages",
+          "label": "Messages",
+          "route": "/",
+          "role": "employee",
+          "goal": "Use updates and direct chat with supervisor or admin fallback.",
+          "steps": [
+            "Open Messages.",
+            "Use Updates to review status notices.",
+            "Use Chat to send an instant message.",
+            "Escalate to admin when needed."
+          ],
+          "warnings": [
+            "Message connection states may show Live, Reconnecting..., or Sync issue."
+          ],
+          "screenshotKeys": [
+            "employee-messages-updates.png",
+            "employee-messages-chat.png"
+          ]
+        },
+        {
+          "id": "employee-notifications-more",
+          "label": "Notifications and More",
+          "route": "/",
+          "role": "employee",
+          "goal": "Open notifications, manage profile requests, refresh the dashboard, and sign out.",
+          "steps": [
+            "Open the bell icon for notifications.",
+            "Open More for profile actions.",
+            "Submit or update a profile edit request.",
+            "Use Sign Out when finished."
+          ],
+          "warnings": [
+            "Profile changes do not go live until admin approval."
+          ],
+          "screenshotKeys": [
+            "employee-notifications-modal.png",
+            "employee-more-actions.png"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "supervisor-guide",
+      "title": "Supervisor Guide",
+      "goal": "Explain supervisor scope, team review work, team messaging, and settings.",
+      "pages": [
+        {
+          "id": "supervisor-dashboard",
+          "label": "Supervisor Dashboard",
+          "route": "/supervisor",
+          "role": "supervisor",
+          "goal": "Review scope, metrics, team preview, and recent DTR activity.",
+          "steps": [
+            "Open Dashboard.",
+            "Check Supervisor Scope.",
+            "Review Team Preview and recent DTR activity.",
+            "Use quick actions to open team tools."
+          ],
+          "warnings": [
+            "The supervisor dashboard needs an assigned area to load scope data."
+          ],
+          "screenshotKeys": [
+            "supervisor-dashboard-home.png"
+          ]
+        },
+        {
+          "id": "supervisor-team-dtr",
+          "label": "Team DTR",
+          "route": "/supervisor/dtr",
+          "role": "supervisor",
+          "goal": "Review team submissions and submit DTR files for team members.",
+          "steps": [
+            "Filter the queue.",
+            "Open a submission for review.",
+            "Approve, reject, or return pending.",
+            "Use Submit Team DTR for multi-member submission."
+          ],
+          "warnings": [
+            "Bulk team submission can skip existing cutoff rows."
+          ],
+          "screenshotKeys": [
+            "supervisor-team-dtr-queue.png",
+            "supervisor-submit-team-dtr-modal.png"
+          ]
+        },
+        {
+          "id": "supervisor-messages",
+          "label": "Supervisor Messages",
+          "route": "/supervisor/messages",
+          "role": "supervisor",
+          "goal": "Reply to guard threads and resolve conversations.",
+          "steps": [
+            "Open a thread.",
+            "Read the latest messages.",
+            "Send a reply.",
+            "Resolve the thread when complete."
+          ],
+          "warnings": [],
+          "screenshotKeys": [
+            "supervisor-messages.png"
+          ]
+        },
+        {
+          "id": "supervisor-team-directory",
+          "label": "Team Directory",
+          "route": "/supervisor/team",
+          "role": "supervisor",
+          "goal": "View team members, presence, assignment, and schedule.",
+          "steps": [
+            "Filter by branch or presence.",
+            "Search by name, ID, branch, or position.",
+            "Review the Team Members table."
+          ],
+          "warnings": [
+            "The directory uses supervisor scope and may be empty if assignment data is missing."
+          ],
+          "screenshotKeys": [
+            "supervisor-team-directory.png"
+          ]
+        },
+        {
+          "id": "supervisor-settings",
+          "label": "Supervisor Settings",
+          "route": "/supervisor/settings",
+          "role": "supervisor",
+          "goal": "Update personal profile details and access help tools.",
+          "steps": [
+            "Edit allowed profile fields.",
+            "Upload a profile photo if needed.",
+            "Use Send Reset Email for password help.",
+            "Review Scope Notes."
+          ],
+          "warnings": [
+            "Area and branch scope are controlled by admin."
+          ],
+          "screenshotKeys": [
+            "supervisor-settings.png"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "admin-guide",
+      "title": "Admin Guide",
+      "goal": "Explain the admin dashboard, review queues, messages, reports, settings, and notifications.",
+      "pages": [
+        {
+          "id": "admin-dashboard",
+          "label": "Admin Dashboard",
+          "route": "/admin",
+          "role": "admin",
+          "goal": "Review quick actions, metrics, activity, and notifications.",
+          "steps": [
+            "Open Dashboard.",
+            "Review quick actions and metrics.",
+            "Use the bell for notifications.",
+            "Open related queues from activity panels."
+          ],
+          "warnings": [],
+          "screenshotKeys": [
+            "admin-dashboard-home.png",
+            "admin-notifications-modal.png"
+          ]
+        },
+        {
+          "id": "admin-dtr",
+          "label": "DTR Submissions",
+          "route": "/admin/dtr-submissions",
+          "role": "admin",
+          "goal": "Review employee DTR rows and apply single or bulk status changes.",
+          "steps": [
+            "Filter the DTR queue.",
+            "Review individual submissions.",
+            "Approve or reject rows.",
+            "Use bulk actions when needed."
+          ],
+          "warnings": [],
+          "screenshotKeys": [
+            "admin-dtr-submissions.png"
+          ]
+        },
+        {
+          "id": "admin-requirements",
+          "label": "Requirements",
+          "route": "/admin/requirements",
+          "role": "admin",
+          "goal": "Review document and signature uploads.",
+          "steps": [
+            "Filter the requirement queue.",
+            "Open a requirement.",
+            "Mark it Verified or Needs Reupload.",
+            "Use bulk review when needed."
+          ],
+          "warnings": [],
+          "screenshotKeys": [
+            "admin-requirements.png"
+          ]
+        },
+        {
+          "id": "admin-users",
+          "label": "Users",
+          "route": "/admin/users",
+          "role": "admin",
+          "goal": "Manage people, assignment scope, roles, and profile change requests.",
+          "steps": [
+            "Review the Profile Change Request Queue.",
+            "Search the People Directory.",
+            "Change roles when needed.",
+            "Open assignment editor for scope changes."
+          ],
+          "warnings": [
+            "Role and assignment changes affect routing and supervisor visibility."
+          ],
+          "screenshotKeys": [
+            "admin-users-directory.png"
+          ]
+        },
+        {
+          "id": "admin-messages",
+          "label": "Messages",
+          "route": "/admin/messages",
+          "role": "admin",
+          "goal": "Reply to escalated threads and admin fallback conversations.",
+          "steps": [
+            "Open a thread.",
+            "Reply in realtime.",
+            "Resolve the thread when complete."
+          ],
+          "warnings": [],
+          "screenshotKeys": [
+            "admin-messages.png"
+          ]
+        },
+        {
+          "id": "admin-reports",
+          "label": "Reports",
+          "route": "/admin/reports",
+          "role": "admin",
+          "goal": "Review DTR analytics and submission trends.",
+          "steps": [
+            "Open Reports.",
+            "Review status distribution.",
+            "Check top locations.",
+            "Review the last 7 days submission trend."
+          ],
+          "warnings": [],
+          "screenshotKeys": [
+            "admin-reports.png"
+          ]
+        },
+        {
+          "id": "admin-settings",
+          "label": "Settings",
+          "route": "/admin/settings",
+          "role": "admin",
+          "goal": "Maintain admin profile settings and dashboard alert preferences.",
+          "steps": [
+            "Update profile fields.",
+            "Review system notes.",
+            "Mute or enable realtime alert sounds."
+          ],
+          "warnings": [],
+          "screenshotKeys": [
+            "admin-settings.png"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "troubleshooting",
+      "title": "Troubleshooting",
+      "goal": "Help users recover from access problems, missing data, onboarding delays, review delays, and messaging sync issues.",
+      "pages": [
+        {
+          "id": "access-and-routing-issues",
+          "label": "Access and Routing Issues",
+          "route": null,
+          "role": "all",
+          "goal": "Explain access denied, onboarding redirects, and role-based routing.",
+          "steps": [
+            "Confirm the correct portal is being used.",
+            "Check whether the account has a profile record.",
+            "Verify admin role before using the admin portal."
+          ],
+          "warnings": [
+            "Role-based redirects are expected behavior."
+          ],
+          "screenshotKeys": []
+        },
+        {
+          "id": "onboarding-and-review-delays",
+          "label": "Onboarding and Review Delays",
+          "route": null,
+          "role": "employee",
+          "goal": "Explain pending email confirmation and review statuses.",
+          "steps": [
+            "Check email for confirmation if signup is pending.",
+            "Watch DTR and requirement statuses.",
+            "Review remarks and notifications for next actions."
+          ],
+          "warnings": [
+            "Pending Review and Needs Reupload are normal workflow states."
+          ],
+          "screenshotKeys": []
+        },
+        {
+          "id": "messaging-recovery",
+          "label": "Messaging Recovery",
+          "route": null,
+          "role": "all",
+          "goal": "Explain chat connection states and recovery behavior.",
+          "steps": [
+            "Watch the connection pill.",
+            "Wait during reconnect.",
+            "Use Sync now if the recovery action appears."
+          ],
+          "warnings": [
+            "Live is normal; Reconnecting... and Sync issue indicate recovery states."
+          ],
+          "screenshotKeys": []
+        }
+      ]
+    }
+  ]
+}

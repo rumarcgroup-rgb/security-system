@@ -17,6 +17,7 @@ import Card from "../../../components/ui/Card";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { formatDateTime } from "../employeeDashboardUtils";
 import {
+  buildEditedLabel,
   getThreadCounterpartLabel,
   getThreadMetaCopy,
   getThreadPreview,
@@ -75,6 +76,9 @@ export default function EmployeeMessagesView({
   const [activeFilter, setActiveFilter] = useState("all");
   const [expandedMessageId, setExpandedMessageId] = useState(null);
   const [draftChatMessage, setDraftChatMessage] = useState("");
+  const [isChatComposerFocused, setIsChatComposerFocused] = useState(false);
+  const [editingChatMessageId, setEditingChatMessageId] = useState(null);
+  const [editingChatMessageDraft, setEditingChatMessageDraft] = useState("");
   const chatHistoryRef = useRef(null);
 
   const filteredMessages = useMemo(() => {
@@ -142,6 +146,29 @@ export default function EmployeeMessagesView({
     });
   }, [activeWorkspace, chatInbox.activeMessages]);
 
+  useEffect(() => {
+    chatInbox.setComposerTyping?.({
+      draftText: activeWorkspace === "chat" ? draftChatMessage : "",
+      hasFocus: activeWorkspace === "chat" && isChatComposerFocused,
+    });
+  }, [activeWorkspace, chatInbox.setComposerTyping, draftChatMessage, isChatComposerFocused]);
+
+  useEffect(() => {
+    setEditingChatMessageId(null);
+    setEditingChatMessageDraft("");
+  }, [chatInbox.activeThreadId]);
+
+  useEffect(() => {
+    if (!editingChatMessageId) return;
+
+    const isStillEditable = editingChatMessageId === chatInbox.editableMessageId;
+    const messageStillExists = chatInbox.activeMessages.some((message) => message.id === editingChatMessageId);
+    if (isStillEditable && messageStillExists) return;
+
+    setEditingChatMessageId(null);
+    setEditingChatMessageDraft("");
+  }, [chatInbox.activeMessages, chatInbox.editableMessageId, editingChatMessageId]);
+
   function handleToggleMessage(message) {
     setExpandedMessageId((current) => (current === message.id ? null : message.id));
     onStatusMessageOpen(message.id);
@@ -152,6 +179,19 @@ export default function EmployeeMessagesView({
     const didSend = await chatInbox.sendMessage(draftChatMessage, chatInbox.activeThread?.id || null);
     if (didSend) {
       setDraftChatMessage("");
+    }
+  }
+
+  function handleStartEditingChatMessage(message) {
+    setEditingChatMessageId(message.id);
+    setEditingChatMessageDraft(message.body || "");
+  }
+
+  async function handleSaveEditedChatMessage(messageId) {
+    const didSave = await chatInbox.editMessage?.(messageId, editingChatMessageDraft);
+    if (didSave) {
+      setEditingChatMessageId(null);
+      setEditingChatMessageDraft("");
     }
   }
 
@@ -310,6 +350,18 @@ export default function EmployeeMessagesView({
                   Escalate to admin
                 </Button>
               ) : null}
+              {chatInbox.activeThread?.supervisor_user_id && chatInbox.activeThread?.escalated_to_admin ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="employee-button-secondary"
+                  loading={chatInbox.deescalatingThreadId === chatInbox.activeThread.id}
+                  onClick={() => chatInbox.deescalateThread(chatInbox.activeThread.id)}
+                >
+                  <ShieldAlert size={16} />
+                  Turn off admin escalation
+                </Button>
+              ) : null}
             </div>
           </Card>
 
@@ -370,6 +422,9 @@ export default function EmployeeMessagesView({
 
               {chatInbox.activeMessages.map((message) => {
                 const isOwnMessage = message.sender_user_id === currentUserId;
+                const isEditingMessage = editingChatMessageId === message.id;
+                const canEditMessage = Boolean(message.id === chatInbox.editableMessageId && !message.localStatus);
+                const messageReceipt = chatInbox.messageSeenReceipts?.[message.id] || null;
 
                 return (
                   <div
@@ -387,11 +442,57 @@ export default function EmployeeMessagesView({
                         </span>
                         <span className="message-bubble__time">{formatDateTime(message.created_at)}</span>
                       </div>
-                      <p className="message-bubble__copy">{message.body}</p>
+                      {isEditingMessage ? (
+                        <div className="message-bubble__editor">
+                          <textarea
+                            className="message-bubble__editor-input"
+                            value={editingChatMessageDraft}
+                            onChange={(event) => setEditingChatMessageDraft(event.target.value)}
+                            rows={3}
+                          />
+                          <div className="message-bubble__actions">
+                            <button
+                              type="button"
+                              className="message-bubble__action-button"
+                              onClick={() => {
+                                setEditingChatMessageId(null);
+                                setEditingChatMessageDraft("");
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="message-bubble__action-button message-bubble__action-button--primary"
+                              onClick={() => handleSaveEditedChatMessage(message.id)}
+                              disabled={!editingChatMessageDraft.trim() || editingChatMessageDraft.trim() === (message.body || "").trim() || chatInbox.editingMessageId === message.id}
+                            >
+                              {chatInbox.editingMessageId === message.id ? "Saving..." : "Save"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="message-bubble__copy">{message.body}</p>
+                      )}
                       {message.localStatus ? (
                         <p className={`message-bubble__delivery message-bubble__delivery--${message.localStatus}`}>
                           {message.localStatus === "failed" ? "Failed to send. Press send again to retry." : "Sending..."}
                         </p>
+                      ) : null}
+                      {!isEditingMessage && messageReceipt ? <p className="message-bubble__receipt">{messageReceipt.label}</p> : null}
+                      {!isEditingMessage && message.edited_at ? (
+                        <p className="message-bubble__edited">{buildEditedLabel(message.sender_role)}</p>
+                      ) : null}
+                      {!isEditingMessage && canEditMessage ? (
+                        <div className="message-bubble__actions">
+                          <button
+                            type="button"
+                            className="message-bubble__action-button"
+                            onClick={() => handleStartEditingChatMessage(message)}
+                          >
+                            Edit
+                          </button>
+                        </div>
                       ) : null}
                     </article>
                   </div>
@@ -417,10 +518,15 @@ export default function EmployeeMessagesView({
                   rows={3}
                   value={draftChatMessage}
                   onChange={(event) => setDraftChatMessage(event.target.value)}
+                  onFocus={() => setIsChatComposerFocused(true)}
+                  onBlur={() => setIsChatComposerFocused(false)}
                 />
               </label>
               <div className="message-composer__actions">
-                <p className="admin-copy-xs-muted">Text-only instant messaging for quick updates, questions, and escalation notes.</p>
+                <div className="message-composer__status">
+                  {chatInbox.activeTypingLabel ? <p className="message-composer__typing">{chatInbox.activeTypingLabel}</p> : null}
+                  <p className="admin-copy-xs-muted">Text-only instant messaging for quick updates, questions, and escalation notes.</p>
+                </div>
                 <Button type="submit" loading={chatInbox.sendingMessage} disabled={!draftChatMessage.trim()}>
                   <SendHorizontal size={16} />
                   Send Message

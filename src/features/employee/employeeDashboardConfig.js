@@ -1,7 +1,7 @@
 import { BriefcaseBusiness, ShieldCheck, UserRound } from "lucide-react";
 import { getStoredEmployeePortalType, normalizeEmployeePortal } from "../../lib/employeePortal";
 
-export const REQUIRED_DOCUMENTS = ["Valid ID", "NBI Clearance", "Medical Certificate", "Barangay Clearance", "Signature"];
+export const REQUIRED_DOCUMENTS = ["License", "NBI Clearance", "Medical Certificate", "Barangay Clearance", "Valid ID", "Signature"];
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 export const DOCUMENT_TYPES = [...IMAGE_TYPES, "application/pdf"];
 export const GENDER_OPTIONS = ["Male", "Female"];

@@ -16,7 +16,7 @@ export const MESSAGE_THREAD_SUMMARY_SELECT = `
   read_states:message_read_states(user_id, last_read_message_id, last_read_at)
 `;
 
-export const MESSAGE_THREAD_MESSAGE_SELECT = "id,thread_id,sender_user_id,sender_role,body,created_at";
+export const MESSAGE_THREAD_MESSAGE_SELECT = "id,thread_id,sender_user_id,sender_role,body,created_at,edited_at";
 
 export function applyMessageThreadScope(query, { currentRole, currentUserId }) {
   if (currentRole === "employee") {
@@ -65,6 +65,51 @@ export function countUnreadThreads(threads = [], currentUserId) {
 export function normalizeMessageSenderRole(role = "employee") {
   if (role === "admin" || role === "supervisor") return role;
   return "employee";
+}
+
+export function getThreadParticipantRole(thread, userId) {
+  if (!thread || !userId) return null;
+  if (thread.employee_user_id === userId) return "employee";
+  if (thread.supervisor_user_id === userId) return "supervisor";
+  return "admin";
+}
+
+export function getRoleDisplayName(role) {
+  if (role === "admin") return "Admin";
+  if (role === "supervisor") return "Supervisor";
+  return "Employee";
+}
+
+export function buildSeenReceiptLabel(role, { useRoleLabel = false } = {}) {
+  if (!useRoleLabel || !role) return "Seen";
+  return `Seen by ${getRoleDisplayName(role)}`;
+}
+
+export function buildEditedLabel(role) {
+  return `Edited by ${getRoleDisplayName(role)}`;
+}
+
+export function buildTypingLabel(roles = []) {
+  const normalizedRoles = [...new Set(roles.filter(Boolean).map((role) => normalizeMessageSenderRole(role)))];
+  const orderedRoles = normalizedRoles.sort((left, right) => {
+    const roleOrder = {
+      employee: 0,
+      supervisor: 1,
+      admin: 2,
+    };
+    return (roleOrder[left] ?? 99) - (roleOrder[right] ?? 99);
+  });
+
+  if (!orderedRoles.length) return "";
+  if (orderedRoles.length === 1) {
+    return `${getRoleDisplayName(orderedRoles[0])} is typing...`;
+  }
+  if (orderedRoles.length === 2) {
+    return `${getRoleDisplayName(orderedRoles[0])} and ${getRoleDisplayName(orderedRoles[1])} are typing...`;
+  }
+
+  const leadingLabels = orderedRoles.slice(0, 2).map((role) => getRoleDisplayName(role));
+  return `${leadingLabels.join(", ")}, and ${orderedRoles.length - 2} others are typing...`;
 }
 
 export function getThreadCounterpartLabel(thread, currentRole) {

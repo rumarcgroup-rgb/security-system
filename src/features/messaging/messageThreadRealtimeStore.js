@@ -45,6 +45,18 @@ function buildNextThreads(currentThreads, nextThread) {
   return sortThreads([...withoutThread, nextThread]);
 }
 
+function mergeThreadRow(currentThread, nextThread) {
+  if (!currentThread) return nextThread;
+
+  return {
+    ...currentThread,
+    ...nextThread,
+    employee: nextThread.employee || currentThread.employee || null,
+    supervisor: nextThread.supervisor || currentThread.supervisor || null,
+    read_states: nextThread.read_states || currentThread.read_states || [],
+  };
+}
+
 function createRealtimeStore({ currentRole, currentUserId }) {
   let state = {
     threads: [],
@@ -174,7 +186,13 @@ function createRealtimeStore({ currentRole, currentUserId }) {
 
     setState((current) => ({
       ...current,
-      threads: buildNextThreads(current.threads, nextThread),
+      threads: buildNextThreads(
+        current.threads,
+        mergeThreadRow(
+          current.threads.find((thread) => thread.id === nextThread.id) || null,
+          nextThread
+        )
+      ),
       lastSyncedAt: new Date().toISOString(),
     }));
   }
@@ -190,7 +208,7 @@ function createRealtimeStore({ currentRole, currentUserId }) {
   }
 
   function applyReadStateRow(nextReadState) {
-    if (!nextReadState?.thread_id || nextReadState.user_id !== currentUserId) return;
+    if (!nextReadState?.thread_id || !nextReadState.user_id) return;
 
     setState((current) => ({
       ...current,
@@ -210,7 +228,7 @@ function createRealtimeStore({ currentRole, currentUserId }) {
   }
 
   function removeReadState(nextReadState) {
-    if (!nextReadState?.thread_id || nextReadState.user_id !== currentUserId) return;
+    if (!nextReadState?.thread_id || !nextReadState.user_id) return;
 
     setState((current) => ({
       ...current,
@@ -376,7 +394,6 @@ function createRealtimeStore({ currentRole, currentUserId }) {
           event: "*",
           schema: "public",
           table: "message_read_states",
-          filter: `user_id=eq.${currentUserId}`,
         },
         (payload) => {
           if (payload.eventType === "DELETE") {

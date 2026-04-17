@@ -10,6 +10,7 @@ export default function AdminMessagesPage({ profile }) {
   return (
     <MessageThreadInboxPanel
       activeMessages={inbox.activeMessages}
+      activeTypingLabel={inbox.activeTypingLabel}
       activeThread={inbox.activeThread}
       activeThreadId={inbox.activeThreadId}
       activeThreadUnread={inbox.activeThreadUnread}
@@ -17,8 +18,13 @@ export default function AdminMessagesPage({ profile }) {
       currentRole="admin"
       currentUserId={profile?.id}
       description="Escalated guard threads and admin fallback conversations appear here."
+      editableMessageId={inbox.editableMessageId}
+      editingMessageId={inbox.editingMessageId}
       lastSyncedAt={inbox.lastSyncedAt}
+      messageSeenReceipts={inbox.messageSeenReceipts}
       messagesLoading={inbox.messagesLoading}
+      onComposerTyping={inbox.setComposerTyping}
+      onEditMessage={inbox.editMessage}
       onMarkThreadRead={inbox.markThreadRead}
       onResolveThread={inbox.resolveThread}
       onSelectThread={inbox.setActiveThreadId}

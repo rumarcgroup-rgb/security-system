@@ -5,6 +5,7 @@ import Card from "../../components/ui/Card";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { formatDateTime } from "../employee/employeeDashboardUtils";
 import {
+  buildEditedLabel,
   getThreadCounterpartLabel,
   getThreadMetaCopy,
   getThreadPreview,
@@ -14,6 +15,7 @@ import {
 
 export default function MessageThreadInboxPanel({
   activeMessages,
+  activeTypingLabel,
   activeThread,
   activeThreadId,
   activeThreadUnread,
@@ -21,9 +23,14 @@ export default function MessageThreadInboxPanel({
   currentRole,
   currentUserId,
   description,
+  editableMessageId,
+  editingMessageId,
   lastSyncedAt,
+  messageSeenReceipts,
   messagesLoading,
   onMarkThreadRead,
+  onComposerTyping,
+  onEditMessage,
   onResolveThread,
   onSelectThread,
   onSendMessage,
@@ -36,6 +43,9 @@ export default function MessageThreadInboxPanel({
   unreadCount,
 }) {
   const [draftMessage, setDraftMessage] = useState("");
+  const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const [editingBubbleId, setEditingBubbleId] = useState(null);
+  const [editingBubbleDraft, setEditingBubbleDraft] = useState("");
   const conversationBodyRef = useRef(null);
 
   const latestActiveMessage = useMemo(() => {
@@ -68,11 +78,47 @@ export default function MessageThreadInboxPanel({
     });
   }, [activeMessages]);
 
+  useEffect(() => {
+    onComposerTyping?.({
+      draftText: draftMessage,
+      hasFocus: isComposerFocused,
+    });
+  }, [draftMessage, isComposerFocused, onComposerTyping]);
+
+  useEffect(() => {
+    setEditingBubbleId(null);
+    setEditingBubbleDraft("");
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    if (!editingBubbleId) return;
+
+    const isStillEditable = editingBubbleId === editableMessageId;
+    const messageStillExists = activeMessages.some((message) => message.id === editingBubbleId);
+    if (isStillEditable && messageStillExists) return;
+
+    setEditingBubbleId(null);
+    setEditingBubbleDraft("");
+  }, [activeMessages, editableMessageId, editingBubbleId]);
+
   async function handleSendMessage(event) {
     event.preventDefault();
     const didSend = await onSendMessage(draftMessage, activeThread?.id || null);
     if (didSend) {
       setDraftMessage("");
+    }
+  }
+
+  function handleStartEditingMessage(message) {
+    setEditingBubbleId(message.id);
+    setEditingBubbleDraft(message.body || "");
+  }
+
+  async function handleSaveEditedMessage(messageId) {
+    const didSave = await onEditMessage?.(messageId, editingBubbleDraft);
+    if (didSave) {
+      setEditingBubbleId(null);
+      setEditingBubbleDraft("");
     }
   }
 
@@ -195,6 +241,9 @@ export default function MessageThreadInboxPanel({
 
                 {activeMessages.map((message) => {
                   const isOwnMessage = message.sender_user_id === currentUserId;
+                  const messageReceipt = messageSeenReceipts?.[message.id] || null;
+                  const canEditMessage = Boolean(message.id === editableMessageId && !message.localStatus);
+                  const isEditingMessage = editingBubbleId === message.id;
 
                   return (
                     <div
@@ -212,13 +261,59 @@ export default function MessageThreadInboxPanel({
                           </span>
                           <span className="message-bubble__time">{formatDateTime(message.created_at)}</span>
                         </div>
-                        <p className="message-bubble__copy">{message.body}</p>
+                        {isEditingMessage ? (
+                          <div className="message-bubble__editor">
+                            <textarea
+                              className="message-bubble__editor-input"
+                              value={editingBubbleDraft}
+                              onChange={(event) => setEditingBubbleDraft(event.target.value)}
+                              rows={3}
+                            />
+                            <div className="message-bubble__actions">
+                              <button
+                                type="button"
+                                className="message-bubble__action-button"
+                                onClick={() => {
+                                  setEditingBubbleId(null);
+                                  setEditingBubbleDraft("");
+                                }}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="message-bubble__action-button message-bubble__action-button--primary"
+                                onClick={() => handleSaveEditedMessage(message.id)}
+                                disabled={!editingBubbleDraft.trim() || editingBubbleDraft.trim() === (message.body || "").trim() || editingMessageId === message.id}
+                              >
+                                {editingMessageId === message.id ? "Saving..." : "Save"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="message-bubble__copy">{message.body}</p>
+                        )}
                         {message.localStatus ? (
                           <p
                             className={`message-bubble__delivery message-bubble__delivery--${message.localStatus}`}
                           >
                             {message.localStatus === "failed" ? "Failed to send. Press send again to retry." : "Sending..."}
                           </p>
+                        ) : null}
+                        {!isEditingMessage && messageReceipt ? <p className="message-bubble__receipt">{messageReceipt.label}</p> : null}
+                        {!isEditingMessage && message.edited_at ? (
+                          <p className="message-bubble__edited">{buildEditedLabel(message.sender_role)}</p>
+                        ) : null}
+                        {!isEditingMessage && canEditMessage ? (
+                          <div className="message-bubble__actions">
+                            <button
+                              type="button"
+                              className="message-bubble__action-button"
+                              onClick={() => handleStartEditingMessage(message)}
+                            >
+                              Edit
+                            </button>
+                          </div>
                         ) : null}
                       </article>
                     </div>
@@ -234,13 +329,18 @@ export default function MessageThreadInboxPanel({
                     placeholder="Type a message for this thread"
                     value={draftMessage}
                     onChange={(event) => setDraftMessage(event.target.value)}
+                    onFocus={() => setIsComposerFocused(true)}
+                    onBlur={() => setIsComposerFocused(false)}
                     rows={3}
                   />
                 </label>
                 <div className="message-composer__actions">
-                  <p className="admin-copy-xs-muted">
-                    Text-only replies update instantly for everyone in this thread.
-                  </p>
+                  <div className="message-composer__status">
+                    {activeTypingLabel ? <p className="message-composer__typing">{activeTypingLabel}</p> : null}
+                    <p className="admin-copy-xs-muted">
+                      Text-only replies update instantly for everyone in this thread.
+                    </p>
+                  </div>
                   <Button type="submit" loading={sendingMessage} disabled={!draftMessage.trim()}>
                     <SendHorizontal size={16} />
                     Send Reply
