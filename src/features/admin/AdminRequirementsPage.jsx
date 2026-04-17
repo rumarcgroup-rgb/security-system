@@ -9,8 +9,8 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import { sortAreas } from "../../lib/areas";
 import { sortBranches } from "../../lib/branches";
 import { supabase } from "../../lib/supabase";
-import { attachSignedUrls } from "../../lib/storage";
 import RequirementReviewModal from "./requirements/RequirementReviewModal";
+import { useLiveRequirementsStore } from "../realtime/useLiveRequirementsStore";
 import "./AdminRequirementsPage.css";
 
 const REVIEWABLE_STATUSES = ["Pending Review", "Verified", "Needs Reupload"];
@@ -23,10 +23,8 @@ function normalizeRequirementRow(row) {
   };
 }
 
-export default function AdminRequirementsPage() {
+export default function AdminRequirementsPage({ profile }) {
   const [searchParams] = useSearchParams();
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [activeItem, setActiveItem] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -38,90 +36,19 @@ export default function AdminRequirementsPage() {
   });
 
   const selectedUserId = searchParams.get("user") || "";
+  const { rows, loading, patchRowsByIds } = useLiveRequirementsStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
 
   useEffect(() => {
-    loadRows();
-
-    const channel = supabase
-      .channel("admin-requirements-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, loadRows)
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, loadRows)
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, []);
-
-  async function loadRows() {
-    setLoading(true);
-
-    const [documentsRes, profilesRes] = await Promise.all([
-      supabase
-        .from("employee_documents")
-        .select(
-          "id,user_id,document_type,file_url,review_status,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(id,full_name,employee_id,location,branch)"
-        )
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("profiles")
-        .select("id,full_name,employee_id,location,branch,signature_url,signature_status,created_at")
-        .order("created_at", { ascending: false }),
-    ]);
-
-    if (documentsRes.error) {
-      toast.error(documentsRes.error.message);
-      setLoading(false);
-      return;
-    }
-
-    if (profilesRes.error) {
-      toast.error(profilesRes.error.message);
-      setLoading(false);
-      return;
-    }
-
-    const documentRows = await attachSignedUrls(
-      (documentsRes.data ?? []).map((row) => ({
-        ...row,
-        requirement_type: row.document_type,
-        status: row.review_status || "Pending Review",
-        source_table: "employee_documents",
-      })),
-      "documents"
-    );
-
-    const signatureSourceRows = (profilesRes.data ?? [])
-      .filter((profile) => profile.signature_url)
-      .map((profile) => ({
-        id: `signature-${profile.id}`,
-        user_id: profile.id,
-        requirement_type: "Signature",
-        file_url: profile.signature_url,
-        created_at: profile.created_at,
-        status: profile.signature_status || "Pending Review",
-        source_table: "profiles",
-        profiles: {
-          id: profile.id,
-          full_name: profile.full_name,
-          employee_id: profile.employee_id,
-          location: profile.location,
-          branch: profile.branch,
-        },
-      }));
-
-    const signatureRows = await attachSignedUrls(signatureSourceRows, "documents");
-
-    const combined = [...documentRows, ...signatureRows]
-      .map(normalizeRequirementRow)
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-
-    setRows(combined);
-    setSelectedIds((current) => current.filter((id) => combined.some((row) => row.id === id)));
+    setSelectedIds((current) => current.filter((id) => rows.some((row) => row.id === id)));
     setActiveItem((current) => {
       if (!current) return null;
-      return combined.find((row) => row.id === current.id) || null;
+      return rows.find((row) => row.id === current.id) || null;
     });
-    setLoading(false);
-  }
+  }, [rows]);
 
   async function updateStatus(item, nextStatus) {
     if (!item) return;
@@ -140,7 +67,7 @@ export default function AdminRequirementsPage() {
       return;
     }
 
-    setRows((current) => current.map((row) => (row.id === item.id ? { ...row, status: nextStatus } : row)));
+    patchRowsByIds([item.id], { status: nextStatus });
     setActiveItem((current) => (current?.id === item.id ? { ...current, status: nextStatus } : current));
     toast.success(`Requirement marked as ${nextStatus}.`);
   }
@@ -165,7 +92,7 @@ export default function AdminRequirementsPage() {
         if (error) throw error;
       }
 
-      setRows((current) => current.map((row) => (selectedIds.includes(row.id) ? { ...row, status: nextStatus } : row)));
+      patchRowsByIds(selectedIds, { status: nextStatus });
       setActiveItem((current) => (current && selectedIds.includes(current.id) ? { ...current, status: nextStatus } : current));
       toast.success(`${selectedIds.length} requirement(s) marked as ${nextStatus}.`);
       setSelectedIds([]);

@@ -136,6 +136,22 @@
   gap: 0.75rem;
 }
 
+.supervisor-dashboard-home__team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.supervisor-dashboard-home__team-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.supervisor-dashboard-home__team-main {
+  min-width: 0;
+}
+
 .admin-dashboard-home__activity-item {
   display: flex;
   flex-direction: column;
@@ -233,7 +249,8 @@
     grid-template-columns: 1fr;
   }
 
-  .admin-dashboard-home__activity-item {
+  .admin-dashboard-home__activity-item,
+  .supervisor-dashboard-home__team-item {
     align-items: flex-start;
   }
 
@@ -247,7 +264,8 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .admin-dashboard-home__activity-item {
+  .admin-dashboard-home__activity-item,
+  .supervisor-dashboard-home__team-item {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;

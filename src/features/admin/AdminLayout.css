@@ -81,8 +81,24 @@
   background: #1e293b;
 }
 
+.admin-layout__nav-link span {
+  min-width: 0;
+}
+
 .admin-layout__nav-link--active {
   background: var(--brand-500, #3b82f6);
+  color: #fff;
+}
+
+.admin-layout__nav-badge {
+  margin-left: auto;
+  min-width: 1.15rem;
+  border-radius: 999px;
+  background: #f43f5e;
+  padding: 0.1rem 0.35rem;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
   color: #fff;
 }
 
@@ -318,6 +334,13 @@
   .admin-layout--collapsed .admin-layout__nav-link svg,
   .admin-layout--collapsed .admin-layout__logout svg {
     margin: 0;
+  }
+
+  .admin-layout--collapsed .admin-layout__nav-badge {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.35rem;
+    margin-left: 0;
   }
 
   .admin-layout--collapsed .admin-layout__nav-link[data-tooltip]::after,

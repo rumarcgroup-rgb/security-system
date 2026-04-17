@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, CheckCircle2, Clock3, FileText, RefreshCcw, ShieldCheck, Users } from "lucide-react";
-import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { sortAreas } from "../../lib/areas";
 import { sortBranches } from "../../lib/branches";
-import { supabase } from "../../lib/supabase";
 import { isEmployeeOnline } from "../../lib/presence";
+import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
+import { useLiveRequirementsStore } from "../realtime/useLiveRequirementsStore";
+import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
 import "./AdminDashboardHome.css";
 
 const metricCards = [
@@ -78,18 +79,38 @@ function playSoftNotificationSound(tone) {
 }
 
 export default function AdminDashboardHome({ profile }) {
-  const [recentDtrRows, setRecentDtrRows] = useState([]);
-  const [allDtrRows, setAllDtrRows] = useState([]);
-  const [recentRequirementRows, setRecentRequirementRows] = useState([]);
-  const [allRequirementRows, setAllRequirementRows] = useState([]);
-  const [profiles, setProfiles] = useState([]);
   const [highlightedDtrId, setHighlightedDtrId] = useState(null);
   const [highlightedRequirementId, setHighlightedRequirementId] = useState(null);
   const [soundMuted, setSoundMuted] = useState(false);
   const [unreadDtrCount, setUnreadDtrCount] = useState(0);
   const [unreadRequirementCount, setUnreadRequirementCount] = useState(0);
-  const [loading, setLoading] = useState(true);
   const soundMutedRef = useRef(false);
+  const {
+    rows: allDtrRows,
+    loading: dtrLoading,
+    lastEvent: lastDtrEvent,
+  } = useLiveDtrStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
+  const {
+    rows: allRequirementRows,
+    loading: requirementsLoading,
+    lastEvent: lastRequirementEvent,
+  } = useLiveRequirementsStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
+  const {
+    profiles,
+    loading: peopleLoading,
+  } = useLivePeopleStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -119,69 +140,6 @@ export default function AdminDashboardHome({ profile }) {
     };
   }, [profile?.id]);
 
-  useEffect(() => {
-    loadData();
-
-    const dtrChannel = supabase
-      .channel("admin-dashboard-dtr")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, handleDtrChange)
-      .subscribe();
-
-    const documentsChannel = supabase
-      .channel("admin-dashboard-documents")
-      .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, handleRequirementChange)
-      .subscribe();
-
-    const profilesChannel = supabase
-      .channel("admin-dashboard-profiles")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, loadData)
-      .subscribe();
-
-    const presenceChannel = supabase
-      .channel("admin-dashboard-presence")
-      .on("postgres_changes", { event: "*", schema: "public", table: "employee_presence" }, loadData)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(dtrChannel);
-      supabase.removeChannel(documentsChannel);
-      supabase.removeChannel(profilesChannel);
-      supabase.removeChannel(presenceChannel);
-    };
-  }, []);
-
-  function upsertRecentDtrRow(nextRow) {
-    setRecentDtrRows((current) =>
-      [nextRow, ...current.filter((row) => row.id !== nextRow.id)]
-        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-        .slice(0, 8)
-    );
-  }
-
-  function upsertAllDtrRow(nextRow) {
-    setAllDtrRows((current) =>
-      [nextRow, ...current.filter((row) => row.id !== nextRow.id)].sort(
-        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-      )
-    );
-  }
-
-  function upsertRecentRequirementRow(nextRow) {
-    setRecentRequirementRows((current) =>
-      [nextRow, ...current.filter((row) => row.id !== nextRow.id)]
-        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-        .slice(0, 8)
-    );
-  }
-
-  function upsertAllRequirementRow(nextRow) {
-    setAllRequirementRows((current) =>
-      [nextRow, ...current.filter((row) => row.id !== nextRow.id)].sort(
-        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-      )
-    );
-  }
-
   function flashNewActivity(setter, id) {
     setter(id);
     window.setTimeout(() => {
@@ -205,163 +163,29 @@ export default function AdminDashboardHome({ profile }) {
 
     setUnreadRequirementCount(0);
   }
-
-  async function handleDtrChange(payload) {
-    if (payload.eventType === "DELETE") {
-      setRecentDtrRows((current) => current.filter((row) => row.id !== payload.old.id));
-      setAllDtrRows((current) => current.filter((row) => row.id !== payload.old.id));
+  useEffect(() => {
+    if (lastDtrEvent?.eventType !== "INSERT" || !lastDtrEvent.row?.id) {
       return;
     }
 
-    const summaryRow = {
-      id: payload.new.id,
-      status: payload.new.status,
-      created_at: payload.new.created_at,
-      approved_at: payload.new.approved_at,
-    };
-    upsertAllDtrRow(summaryRow);
+    flashNewActivity(setHighlightedDtrId, lastDtrEvent.row.id);
+    setUnreadDtrCount((current) => current + 1);
+    maybePlayNotificationSound("dtr");
+  }, [lastDtrEvent]);
 
-    const { data, error } = await supabase
-      .from("dtr_submissions")
-      .select("id,status,created_at,cutoff,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location,branch)")
-      .eq("id", payload.new.id)
-      .maybeSingle();
-
-    if (!error && data) {
-      upsertRecentDtrRow(data);
-      if (payload.eventType === "INSERT") {
-        flashNewActivity(setHighlightedDtrId, data.id);
-        setUnreadDtrCount((current) => current + 1);
-        toast.success("New DTR received.");
-        maybePlayNotificationSound("dtr");
-      }
-    } else {
-      loadData();
-    }
-  }
-
-  async function handleRequirementChange(payload) {
-    if (payload.eventType === "DELETE") {
-      setRecentRequirementRows((current) => current.filter((row) => row.id !== payload.old.id));
-      setAllRequirementRows((current) => current.filter((row) => row.id !== payload.old.id));
+  useEffect(() => {
+    if (lastRequirementEvent?.eventType !== "INSERT" || !lastRequirementEvent.row?.id) {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("employee_documents")
-      .select(
-        "id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(full_name,employee_id,location,branch)"
-      )
-      .eq("id", payload.new.id)
-      .maybeSingle();
+    flashNewActivity(setHighlightedRequirementId, lastRequirementEvent.row.id);
+    setUnreadRequirementCount((current) => current + 1);
+    maybePlayNotificationSound("requirement");
+  }, [lastRequirementEvent]);
 
-    if (error || !data) {
-      loadData();
-      return;
-    }
-
-    const nextRow = {
-      ...data,
-      requirement_type: data.document_type,
-      status: data.review_status || "Pending Review",
-      source: "employee_documents",
-    };
-
-    upsertAllRequirementRow(nextRow);
-    upsertRecentRequirementRow(nextRow);
-
-    if (payload.eventType === "INSERT") {
-      flashNewActivity(setHighlightedRequirementId, nextRow.id);
-      setUnreadRequirementCount((current) => current + 1);
-      toast("New requirement received.", {
-        duration: 2200,
-        icon: "",
-        style: {
-          border: "1px solid #e2e8f0",
-          background: "#f8fafc",
-          color: "#334155",
-        },
-      });
-      maybePlayNotificationSound("requirement");
-    }
-  }
-
-  async function loadData() {
-    setLoading(true);
-
-    const [recentDtrRes, allDtrRes, documentsRes, profilesRes, presenceRes] = await Promise.all([
-      supabase
-        .from("dtr_submissions")
-        .select("id,status,created_at,cutoff,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location,branch)")
-        .order("created_at", { ascending: false })
-        .limit(8),
-      supabase.from("dtr_submissions").select("id,status,created_at,approved_at").order("created_at", { ascending: false }),
-      supabase
-        .from("employee_documents")
-        .select(
-          "id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(full_name,employee_id,location,branch)"
-        )
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("profiles")
-        .select("id,role,full_name,location,branch,employee_id,created_at,signature_url,signature_status")
-        .order("created_at", { ascending: false }),
-      supabase.from("employee_presence").select("user_id,last_seen_at"),
-    ]);
-
-    if (!recentDtrRes.error) {
-      setRecentDtrRows(recentDtrRes.data ?? []);
-    }
-
-    if (!allDtrRes.error) {
-      setAllDtrRows(allDtrRes.data ?? []);
-    }
-
-    if (!profilesRes.error && !presenceRes.error) {
-      const presenceMap = new Map((presenceRes.data ?? []).map((row) => [row.user_id, row.last_seen_at]));
-      setProfiles(
-        (profilesRes.data ?? []).map((profile) => ({
-          ...profile,
-          last_seen_at: presenceMap.get(profile.id) ?? null,
-        }))
-      );
-    }
-
-    if (!documentsRes.error && !profilesRes.error) {
-      const documentRows = (documentsRes.data ?? []).map((row) => ({
-        ...row,
-        requirement_type: row.document_type,
-        status: row.review_status || "Pending Review",
-        source: "employee_documents",
-      }));
-
-      const signatureRows = (profilesRes.data ?? [])
-        .filter((profile) => profile.signature_url)
-        .map((profile) => ({
-          id: `signature-${profile.id}`,
-          document_type: "Signature",
-          requirement_type: "Signature",
-          created_at: profile.created_at,
-          status: profile.signature_status || "Pending Review",
-          profiles: {
-            full_name: profile.full_name,
-            employee_id: profile.employee_id,
-            location: profile.location,
-            branch: profile.branch,
-          },
-          source: "profiles",
-        }));
-
-      const combinedRequirements = [...documentRows, ...signatureRows].sort(
-        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-      );
-
-      setAllRequirementRows(combinedRequirements);
-      setRecentRequirementRows(combinedRequirements.slice(0, 8));
-    }
-
-    setLoading(false);
-  }
+  const recentDtrRows = useMemo(() => allDtrRows.slice(0, 8), [allDtrRows]);
+  const recentRequirementRows = useMemo(() => allRequirementRows.slice(0, 8), [allRequirementRows]);
+  const loading = dtrLoading || requirementsLoading || peopleLoading;
 
   const metrics = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);

@@ -7,9 +7,10 @@ import Modal from "../../components/ui/Modal";
 import Select from "../../components/ui/Select";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { buildCutoffOptions, mergeCutoffOptions } from "../../lib/dtr";
-import { getSupervisorScopeLabel, isScopedEmployee, matchesSupervisorScope } from "../../lib/supervisorScope";
+import { getSupervisorScopeLabel } from "../../lib/supervisorScope";
 import { supabase } from "../../lib/supabase";
-import { attachSignedUrls } from "../../lib/storage";
+import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
+import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
 import "./SupervisorDtrPage.css";
 
 const statusOptions = ["All", "Pending Review", "Approved", "Rejected"];
@@ -26,12 +27,10 @@ function buildStoragePath(userId, file) {
 }
 
 export default function SupervisorDtrPage({ profile }) {
-  const [rows, setRows] = useState([]);
-  const [teamProfiles, setTeamProfiles] = useState([]);
   const [filters, setFilters] = useState({ branch: "All", cutoff: "All", status: "All", source: "All", q: "" });
   const [reviewItem, setReviewItem] = useState(null);
   const [adminRemarks, setAdminRemarks] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmingSubmit, setConfirmingSubmit] = useState(false);
@@ -45,50 +44,39 @@ export default function SupervisorDtrPage({ profile }) {
     employee_note: "",
   });
   const [submitFile, setSubmitFile] = useState(null);
+  const {
+    rows,
+    patchRowsByIds,
+    syncRowById,
+  } = useLiveDtrStore({
+    currentRole: "supervisor",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
+  const { profiles: teamProfiles } = useLivePeopleStore({
+    currentRole: "supervisor",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
 
   useEffect(() => {
-    loadRows();
-    const channel = supabase
-      .channel("supervisor-dtr-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, loadRows)
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [profile?.location, profile?.branch]);
+    setReviewItem((current) => {
+      if (!current) return null;
+      return rows.find((row) => row.id === current.id) || null;
+    });
+  }, [rows]);
 
-  async function loadRows() {
-    const [dtrRes, profilesRes] = await Promise.all([
-      supabase
-        .from("dtr_submissions")
-        .select("id,user_id,cutoff,employee_note,admin_remarks,file_url,status,approved_at,created_at,submitted_by_role,submitted_by_user_id,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location,branch)")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("profiles")
-        .select("id,full_name,employee_id,location,branch,role,position")
-        .order("full_name", { ascending: true }),
-    ]);
-
-    if (dtrRes.error) {
-      toast.error(dtrRes.error.message);
-      return;
-    }
-
-    if (profilesRes.error) {
-      toast.error(profilesRes.error.message);
-      return;
-    }
-
-    const scopedRows = (dtrRes.data ?? []).filter((row) => matchesSupervisorScope(row, profile));
-    const withSignedUrls = await attachSignedUrls(scopedRows, "dtr-images");
-    setRows(withSignedUrls);
-
-    const scopedTeam = (profilesRes.data ?? []).filter((item) => isScopedEmployee(item, profile));
-    setTeamProfiles(scopedTeam);
+  useEffect(() => {
     setSubmitForm((current) => ({
       ...current,
-      user_ids: current.user_ids?.length ? current.user_ids.filter((id) => scopedTeam.some((member) => member.id === id)) : scopedTeam[0] ? [scopedTeam[0].id] : [],
+      user_ids: current.user_ids?.length
+        ? current.user_ids.filter((id) => teamProfiles.some((member) => member.id === id))
+        : teamProfiles[0]
+          ? [teamProfiles[0].id]
+          : [],
       cutoff: current.cutoff || supervisorCutoffOptions[0] || "",
     }));
-  }
+  }, [supervisorCutoffOptions, teamProfiles]);
 
   const branches = useMemo(() => ["All", ...Array.from(new Set(rows.map((row) => row.profiles?.branch).filter(Boolean)))], [rows]);
   const cutoffOptions = useMemo(() => ["All", ...mergeCutoffOptions(rows.map((row) => row.cutoff), new Date(), 48)], [rows]);
@@ -186,23 +174,23 @@ export default function SupervisorDtrPage({ profile }) {
 
   async function updateStatus(status) {
     if (!reviewItem) return;
-    setLoading(true);
+    setSaving(true);
     const payload = {
       status,
       admin_remarks: adminRemarks.trim() || null,
       approved_at: status === "Approved" ? new Date().toISOString() : null,
     };
     const { error } = await supabase.from("dtr_submissions").update(payload).eq("id", reviewItem.id);
-    setLoading(false);
+    setSaving(false);
 
     if (error) {
       toast.error(error.message);
       return;
     }
 
+    patchRowsByIds([reviewItem.id], payload);
     toast.success(`Marked as ${status}`);
     closeReview();
-    loadRows();
   }
 
   function closeSubmitModal() {
@@ -253,6 +241,7 @@ export default function SupervisorDtrPage({ profile }) {
       }
 
       let submittedCount = 0;
+      const insertedIds = [];
       for (const userId of targetUserIds) {
         const path = buildStoragePath(userId, submitFile);
         const upload = await supabase.storage.from("dtr-images").upload(path, submitFile, {
@@ -262,19 +251,26 @@ export default function SupervisorDtrPage({ profile }) {
         });
         if (upload.error) throw upload.error;
 
-        const { error } = await supabase.from("dtr_submissions").insert({
-          user_id: userId,
-          cutoff: submitForm.cutoff,
-          employee_note: submitForm.employee_note.trim() || null,
-          file_url: path,
-          status: "Pending Review",
-          submitted_by_role: "supervisor",
-          submitted_by_user_id: profile?.id || null,
-          approved_at: null,
-        });
+        const { data, error } = await supabase
+          .from("dtr_submissions")
+          .insert({
+            user_id: userId,
+            cutoff: submitForm.cutoff,
+            employee_note: submitForm.employee_note.trim() || null,
+            file_url: path,
+            status: "Pending Review",
+            submitted_by_role: "supervisor",
+            submitted_by_user_id: profile?.id || null,
+            approved_at: null,
+          })
+          .select("id")
+          .single();
         if (error) throw error;
+        insertedIds.push(data.id);
         submittedCount += 1;
       }
+
+      await Promise.all(insertedIds.map((id) => syncRowById(id)));
 
       const skippedCount = skipExistingRows ? selectedUserIds.length - targetUserIds.length : 0;
       toast.success(
@@ -283,7 +279,6 @@ export default function SupervisorDtrPage({ profile }) {
           : `Submitted ${submittedCount} team DTR(s) successfully.`
       );
       closeSubmitModal();
-      await loadRows();
     } catch (error) {
       toast.error(error.message || "Unable to submit team DTR.");
     } finally {
@@ -490,13 +485,13 @@ export default function SupervisorDtrPage({ profile }) {
               />
             </label>
             <div className="app-modal-footer">
-              <Button variant="secondary" onClick={() => updateStatus("Pending Review")} loading={loading}>
+              <Button variant="secondary" onClick={() => updateStatus("Pending Review")} loading={saving}>
                 Return Pending
               </Button>
-              <Button variant="danger" onClick={() => updateStatus("Rejected")} loading={loading}>
+              <Button variant="danger" onClick={() => updateStatus("Rejected")} loading={saving}>
                 Reject
               </Button>
-              <Button onClick={() => updateStatus("Approved")} loading={loading}>
+              <Button onClick={() => updateStatus("Approved")} loading={saving}>
                 Approve
               </Button>
             </div>

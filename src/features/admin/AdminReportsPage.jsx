@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import Card from "../../components/ui/Card";
 import { sortAreas } from "../../lib/areas";
-import { supabase } from "../../lib/supabase";
+import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
 import "./AdminReportsPage.css";
 
 const statusColors = {
@@ -11,28 +11,12 @@ const statusColors = {
   Rejected: "rejected",
 };
 
-export default function AdminReportsPage() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadData();
-    const channel = supabase
-      .channel("admin-reports-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, loadData)
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, []);
-
-  async function loadData() {
-    setLoading(true);
-    const { data } = await supabase
-      .from("dtr_submissions")
-      .select("status,created_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(location)")
-      .order("created_at", { ascending: false });
-    setRows(data ?? []);
-    setLoading(false);
-  }
+export default function AdminReportsPage({ profile }) {
+  const { rows, loading } = useLiveDtrStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
 
   const metrics = useMemo(() => {
     const total = rows.length;

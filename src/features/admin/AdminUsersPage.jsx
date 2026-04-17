@@ -6,97 +6,56 @@ import Select from "../../components/ui/Select";
 import { AREA_OPTIONS, sortAreas } from "../../lib/areas";
 import { getBranchesForArea } from "../../lib/branches";
 import { supabase } from "../../lib/supabase";
-import { attachSignedUrls } from "../../lib/storage";
 import AssignmentEditorModal from "./users/AssignmentEditorModal";
 import PendingProfileRequestsList from "./users/PendingProfileRequestsList";
 import PeopleDirectoryTable from "./users/PeopleDirectoryTable";
 import ProfileRequestReviewModal from "./users/ProfileRequestReviewModal";
+import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
 import "./AdminUsersPage.css";
 
 const POSITION_OPTIONS = ["CGroup Access", "Security Guard", "Janitor", "Area Supervisor"];
 const SUPERVISOR_POSITION = "Area Supervisor";
 
-export default function AdminUsersPage() {
-  const [profiles, setProfiles] = useState([]);
-  const [profileRequests, setProfileRequests] = useState([]);
+export default function AdminUsersPage({ profile }) {
   const [filters, setFilters] = useState({ role: "All", location: "All", q: "" });
   const [requestFilters, setRequestFilters] = useState({ status: "Pending Review", q: "" });
   const [savingId, setSavingId] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [reviewRequest, setReviewRequest] = useState(null);
   const [savingRequestId, setSavingRequestId] = useState(null);
   const [assignmentProfile, setAssignmentProfile] = useState(null);
-  const [assignmentForm, setAssignmentForm] = useState({ location: "", branch: "", position: "" });
+  const [assignmentForm, setAssignmentForm] = useState({ location: "", branch: "", position: "", supervisor_user_id: "" });
   const [savingAssignment, setSavingAssignment] = useState(false);
+  const {
+    profiles,
+    profileRequests,
+    loading,
+    patchProfilesByIds,
+    patchProfileRequestsByIds,
+  } = useLivePeopleStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
   const assignmentBranchOptions = useMemo(() => getBranchesForArea(assignmentForm.location), [assignmentForm.location]);
   const isSupervisorAssignment = assignmentProfile?.role === "supervisor";
-
-  useEffect(() => {
-    loadPageData();
-    const channel = supabase
-      .channel("admin-users-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, loadPageData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "profile_change_requests" }, loadPageData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "employee_presence" }, loadPageData)
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, []);
-
-  async function loadPageData() {
-    setLoading(true);
-    await Promise.all([loadProfiles(), loadProfileChangeRequests()]);
-    setLoading(false);
-  }
-
-  async function loadProfiles() {
-    const [profilesRes, presenceRes] = await Promise.all([
-      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
-      supabase.from("employee_presence").select("user_id,last_seen_at"),
-    ]);
-
-    if (profilesRes.error) {
-      toast.error(profilesRes.error.message);
-      return;
-    }
-
-    if (presenceRes.error) {
-      toast.error(presenceRes.error.message);
-      return;
-    }
-
-    const presenceMap = new Map((presenceRes.data ?? []).map((row) => [row.user_id, row.last_seen_at]));
-    const withSignedAvatars = await attachSignedUrls(profilesRes.data ?? [], "documents", "avatar_url");
-    setProfiles(
-      withSignedAvatars.map((profile) => ({
-        ...profile,
-        last_seen_at: presenceMap.get(profile.id) ?? null,
-      }))
-    );
-  }
-
-  async function loadProfileChangeRequests() {
-    const { data, error } = await supabase
-      .from("profile_change_requests")
-      .select(
-        "id,user_id,requested_full_name,requested_avatar_url,requested_birthday,requested_age,requested_gender,requested_civil_status,requested_sss,requested_philhealth,requested_pagibig,requested_tin,status,created_at,reviewed_at,profiles:profiles!profile_change_requests_user_id_profile_fkey(full_name,employee_id,location,avatar_url,birthday,age,gender,civil_status,sss,philhealth,pagibig,tin)"
-      )
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
-    const withSignedRequestedAvatars = await attachSignedUrls(data ?? [], "documents", "requested_avatar_url");
-    setProfileRequests(withSignedRequestedAvatars);
-  }
+  const isEmployeeAssignment = assignmentProfile?.role === "employee";
+  const supervisorOptions = useMemo(() => {
+    return profiles
+      .filter((profile) => profile.role === "supervisor")
+      .filter((profile) => !assignmentForm.location || profile.location === assignmentForm.location)
+      .filter((profile) => profile.id !== assignmentProfile?.id)
+      .sort((left, right) => (left.full_name || "").localeCompare(right.full_name || ""));
+  }, [assignmentForm.location, assignmentProfile?.id, profiles]);
 
   async function updateRole(profileId, role) {
     setSavingId(profileId);
     const payload = {
       role,
-      ...(role === "supervisor" ? { position: SUPERVISOR_POSITION, branch: null } : {}),
+      ...(role === "supervisor"
+        ? { position: SUPERVISOR_POSITION, branch: null, supervisor_user_id: null, supervisor: null }
+        : role === "admin"
+          ? { supervisor_user_id: null, supervisor: null }
+          : {}),
     };
     const { error } = await supabase.from("profiles").update(payload).eq("id", profileId);
     setSavingId(null);
@@ -106,16 +65,7 @@ export default function AdminUsersPage() {
       return;
     }
 
-    setProfiles((current) =>
-      current.map((profile) =>
-        profile.id === profileId
-          ? {
-              ...profile,
-              ...payload,
-            }
-          : profile
-      )
-    );
+    patchProfilesByIds([profileId], payload);
     toast.success(`Role updated to ${role}.`);
   }
 
@@ -130,12 +80,13 @@ export default function AdminUsersPage() {
       location: profile.location || "",
       branch: profile.branch || "",
       position: profile.role === "supervisor" ? SUPERVISOR_POSITION : profile.position || "",
+      supervisor_user_id: profile.supervisor_user_id || "",
     });
   }
 
   function closeAssignmentEditor() {
     setAssignmentProfile(null);
-    setAssignmentForm({ location: "", branch: "", position: "" });
+    setAssignmentForm({ location: "", branch: "", position: "", supervisor_user_id: "" });
     setSavingAssignment(false);
   }
 
@@ -147,11 +98,12 @@ export default function AdminUsersPage() {
     setAssignmentForm((current) => {
       if (!assignmentProfile) return current;
       if (isSupervisorAssignment) {
-        if (!current.branch && current.position === SUPERVISOR_POSITION) return current;
+        if (!current.branch && current.position === SUPERVISOR_POSITION && !current.supervisor_user_id) return current;
         return {
           ...current,
           position: SUPERVISOR_POSITION,
           branch: "",
+          supervisor_user_id: "",
         };
       }
       if (assignmentBranchOptions.includes(current.branch)) return current;
@@ -162,13 +114,35 @@ export default function AdminUsersPage() {
     });
   }, [assignmentBranchOptions, assignmentProfile, isSupervisorAssignment]);
 
+  useEffect(() => {
+    setAssignmentForm((current) => {
+      if (!isEmployeeAssignment || !current.supervisor_user_id) return current;
+      if (supervisorOptions.some((profile) => profile.id === current.supervisor_user_id)) return current;
+      return {
+        ...current,
+        supervisor_user_id: "",
+      };
+    });
+  }, [isEmployeeAssignment, supervisorOptions]);
+
   async function saveAssignment() {
     if (!assignmentProfile?.id) return;
+
+    const selectedSupervisor =
+      isEmployeeAssignment && assignmentForm.supervisor_user_id
+        ? supervisorOptions.find((profile) => profile.id === assignmentForm.supervisor_user_id) || null
+        : null;
 
     const payload = {
       location: assignmentForm.location.trim() || null,
       branch: isSupervisorAssignment ? null : assignmentForm.branch.trim() || null,
       position: isSupervisorAssignment ? SUPERVISOR_POSITION : assignmentForm.position.trim() || null,
+      ...(isEmployeeAssignment
+        ? {
+            supervisor_user_id: assignmentForm.supervisor_user_id || null,
+            supervisor: selectedSupervisor?.full_name || null,
+          }
+        : {}),
     };
 
     setSavingAssignment(true);
@@ -180,9 +154,7 @@ export default function AdminUsersPage() {
       return;
     }
 
-    setProfiles((current) =>
-      current.map((profile) => (profile.id === assignmentProfile.id ? { ...profile, ...payload } : profile))
-    );
+    patchProfilesByIds([assignmentProfile.id], payload);
     toast.success("Employee assignment updated.");
     closeAssignmentEditor();
   }
@@ -218,9 +190,27 @@ export default function AdminUsersPage() {
         .eq("id", request.id);
       if (requestError) throw requestError;
 
+      if (nextStatus === "Approved") {
+        patchProfilesByIds([request.user_id], {
+          full_name: request.requested_full_name || request.profiles?.full_name || null,
+          avatar_url: request.requested_avatar_url || request.profiles?.avatar_url || null,
+          birthday: request.requested_birthday || null,
+          age: request.requested_age ?? null,
+          gender: request.requested_gender || null,
+          civil_status: request.requested_civil_status || null,
+          sss: request.requested_sss || null,
+          philhealth: request.requested_philhealth || null,
+          pagibig: request.requested_pagibig || null,
+          tin: request.requested_tin || null,
+        });
+      }
+
+      patchProfileRequestsByIds([request.id], {
+        status: nextStatus,
+        reviewed_at: new Date().toISOString(),
+      });
       toast.success(`Profile request ${nextStatus.toLowerCase()}.`);
       closeProfileRequestReview();
-      await loadPageData();
     } catch (error) {
       toast.error(error.message || "Unable to update profile request.");
       setSavingRequestId(null);
@@ -375,9 +365,11 @@ export default function AdminUsersPage() {
         assignmentForm={assignmentForm}
         assignmentBranchOptions={assignmentBranchOptions}
         areaOptions={AREA_OPTIONS}
+        isEmployeeAssignment={isEmployeeAssignment}
         isSupervisorAssignment={isSupervisorAssignment}
         positionOptions={POSITION_OPTIONS}
         savingAssignment={savingAssignment}
+        supervisorOptions={supervisorOptions}
         onClose={closeAssignmentEditor}
         onSave={saveAssignment}
         onChange={setAssignmentField}

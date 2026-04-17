@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, LayoutDashboard, FileClock, Files, Users, FileBarChart2, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Bell, LayoutDashboard, FileClock, Files, Users, FileBarChart2, Settings, LogOut, MessageSquareText, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Link, NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 import Modal from "../../components/ui/Modal";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { supabase } from "../../lib/supabase";
+import { useMessageUnreadCount } from "../messaging/useMessageUnreadCount";
+import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
+import { useLiveRequirementsStore } from "../realtime/useLiveRequirementsStore";
+import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
 import "./AdminLayout.css";
 
 const items = [
@@ -11,6 +15,7 @@ const items = [
   { to: "/admin/dtr-submissions", label: "DTR Submissions", icon: FileClock },
   { to: "/admin/requirements", label: "Requirements", icon: Files },
   { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/messages", label: "Messages", icon: MessageSquareText },
   { to: "/admin/reports", label: "Reports", icon: FileBarChart2 },
   { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
@@ -20,34 +25,24 @@ export default function AdminLayout({ profile }) {
   const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [seenNotificationIds, setSeenNotificationIds] = useState([]);
-  const [notifications, setNotifications] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  useEffect(() => {
-    loadNotifications();
-
-    const dtrChannel = supabase
-      .channel("admin-layout-dtr-notifications")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, loadNotifications)
-      .subscribe();
-
-    const documentsChannel = supabase
-      .channel("admin-layout-document-notifications")
-      .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, loadNotifications)
-      .subscribe();
-
-    const profileRequestChannel = supabase
-      .channel("admin-layout-profile-request-notifications")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profile_change_requests" }, loadNotifications)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(dtrChannel);
-      supabase.removeChannel(documentsChannel);
-      supabase.removeChannel(profileRequestChannel);
-    };
-  }, []);
+  const unreadMessageCount = useMessageUnreadCount({ currentRole: "admin", currentUserId: profile?.id });
+  const { rows: dtrRows } = useLiveDtrStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
+  const { rows: requirementRows } = useLiveRequirementsStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
+  const { profileRequests } = useLivePeopleStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
 
   useEffect(() => {
     function syncSidebarMode() {
@@ -70,79 +65,49 @@ export default function AdminLayout({ profile }) {
     };
   }, []);
 
-  async function loadNotifications() {
-    const [dtrRes, documentsRes, profileRequestsRes] = await Promise.all([
-      supabase
-        .from("dtr_submissions")
-        .select("id,status,created_at,cutoff,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id)")
-        .order("created_at", { ascending: false })
-        .limit(6),
-      supabase
-        .from("employee_documents")
-        .select(
-          "id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(full_name,employee_id)"
-        )
-        .order("created_at", { ascending: false })
-        .limit(6),
-      supabase
-        .from("profile_change_requests")
-        .select(
-          "id,status,created_at,requested_full_name,profiles:profiles!profile_change_requests_user_id_profile_fkey(full_name,employee_id)"
-        )
-        .order("created_at", { ascending: false })
-        .limit(6),
-    ]);
-
+  const notifications = useMemo(() => {
     const nextNotifications = [];
 
-    if (!dtrRes.error) {
-      (dtrRes.data ?? []).forEach((row) => {
-        nextNotifications.push({
-          id: `dtr-${row.id}`,
-          title: `${row.profiles?.full_name || "Employee"} submitted a DTR`,
-          subtitle: `${row.profiles?.employee_id || "No Employee ID"} | ${row.cutoff || "No cutoff"}`,
-          createdAt: row.created_at,
-          status: row.status,
-          link: "/admin/dtr-submissions",
-          linkLabel: "Open DTR queue",
-        });
+    dtrRows.slice(0, 6).forEach((row) => {
+      nextNotifications.push({
+        id: `dtr-${row.id}`,
+        title: `${row.profiles?.full_name || "Employee"} submitted a DTR`,
+        subtitle: `${row.profiles?.employee_id || "No Employee ID"} | ${row.cutoff || "No cutoff"}`,
+        createdAt: row.created_at,
+        status: row.status,
+        link: "/admin/dtr-submissions",
+        linkLabel: "Open DTR queue",
       });
-    }
+    });
 
-    if (!documentsRes.error) {
-      (documentsRes.data ?? []).forEach((row) => {
-        nextNotifications.push({
-          id: `document-${row.id}`,
-          title: `${row.profiles?.full_name || "Employee"} uploaded ${row.document_type || "a requirement"}`,
-          subtitle: `${row.profiles?.employee_id || "No Employee ID"} | Waiting on requirement review`,
-          createdAt: row.created_at,
-          status: row.review_status || "Pending Review",
-          link: "/admin/requirements",
-          linkLabel: "Review requirements",
-        });
+    requirementRows.slice(0, 6).forEach((row) => {
+      nextNotifications.push({
+        id: `requirement-${row.id}`,
+        title: `${row.profiles?.full_name || "Employee"} uploaded ${row.requirement_type || "a requirement"}`,
+        subtitle: `${row.profiles?.employee_id || "No Employee ID"} | Waiting on requirement review`,
+        createdAt: row.created_at,
+        status: row.status,
+        link: "/admin/requirements",
+        linkLabel: "Review requirements",
       });
-    }
+    });
 
-    if (!profileRequestsRes.error) {
-      (profileRequestsRes.data ?? []).forEach((row) => {
-        nextNotifications.push({
-          id: `profile-request-${row.id}`,
-          title: `${row.profiles?.full_name || "Employee"} sent a profile update request`,
-          subtitle: `${row.profiles?.employee_id || "No Employee ID"} | Requested name: ${row.requested_full_name || "No change"}`,
-          createdAt: row.created_at,
-          status: row.status,
-          link: "/admin/users",
-          linkLabel: "Review request",
-        });
+    profileRequests.slice(0, 6).forEach((row) => {
+      nextNotifications.push({
+        id: `profile-request-${row.id}`,
+        title: `${row.profiles?.full_name || "Employee"} sent a profile update request`,
+        subtitle: `${row.profiles?.employee_id || "No Employee ID"} | Requested name: ${row.requested_full_name || "No change"}`,
+        createdAt: row.created_at,
+        status: row.status,
+        link: "/admin/users",
+        linkLabel: "Review request",
       });
-    }
+    });
 
-    setNotifications(
-      nextNotifications
-        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-        .slice(0, 12)
-    );
-  }
+    return nextNotifications
+      .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
+      .slice(0, 12);
+  }, [dtrRows, profileRequests, requirementRows]);
 
   const unreadCount = useMemo(() => {
     return notifications.filter((item) => !seenNotificationIds.includes(item.id)).length;
@@ -204,7 +169,11 @@ export default function AdminLayout({ profile }) {
                 `admin-layout__nav-link${isActive ? " admin-layout__nav-link--active" : ""}`
               }
             >
-              <Icon size={16} /> {label}
+              <Icon size={16} />
+              <span>{label}</span>
+              {to === "/admin/messages" && unreadMessageCount > 0 ? (
+                <span className="admin-layout__nav-badge">{Math.min(unreadMessageCount, 9)}</span>
+              ) : null}
             </NavLink>
           ))}
         </nav>

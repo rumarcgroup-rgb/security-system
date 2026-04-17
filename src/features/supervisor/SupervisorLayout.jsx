@@ -1,12 +1,14 @@
-import { FileClock, LayoutDashboard, LogOut, Settings, Users, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { FileClock, LayoutDashboard, LogOut, MessageSquareText, Settings, Users, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import { useMessageUnreadCount } from "../messaging/useMessageUnreadCount";
 import "./SupervisorLayout.css";
 
 const items = [
   { to: "/supervisor", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/supervisor/dtr", label: "Team DTR", icon: FileClock },
+  { to: "/supervisor/messages", label: "Messages", icon: MessageSquareText },
   { to: "/supervisor/team", label: "Team", icon: Users },
   { to: "/supervisor/settings", label: "Settings", icon: Settings },
 ];
@@ -16,6 +18,7 @@ export default function SupervisorLayout({ profile }) {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const unreadMessageCount = useMessageUnreadCount({ currentRole: "supervisor", currentUserId: profile?.id });
 
   useEffect(() => {
     function syncSidebarMode() {
@@ -94,7 +97,11 @@ export default function SupervisorLayout({ profile }) {
                 `admin-layout__nav-link${isActive ? " admin-layout__nav-link--active" : ""}`
               }
             >
-              <Icon size={16} /> {label}
+              <Icon size={16} />
+              <span>{label}</span>
+              {to === "/supervisor/messages" && unreadMessageCount > 0 ? (
+                <span className="admin-layout__nav-badge">{Math.min(unreadMessageCount, 9)}</span>
+              ) : null}
             </NavLink>
           ))}
         </nav>
@@ -150,6 +157,9 @@ export default function SupervisorLayout({ profile }) {
             >
               <Icon size={16} />
               <span>{label}</span>
+              {to === "/supervisor/messages" && unreadMessageCount > 0 ? (
+                <span className="supervisor-layout__mobile-badge">{Math.min(unreadMessageCount, 9)}</span>
+              ) : null}
             </NavLink>
           ))}
         </nav>

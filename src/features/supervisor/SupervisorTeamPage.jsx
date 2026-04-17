@@ -1,53 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import Card from "../../components/ui/Card";
 import Select from "../../components/ui/Select";
 import { sortBranches } from "../../lib/branches";
 import { isEmployeeOnline } from "../../lib/presence";
-import { supabase } from "../../lib/supabase";
-import { attachSignedUrls } from "../../lib/storage";
-import { getSupervisorScopeLabel, isScopedEmployee } from "../../lib/supervisorScope";
+import { getSupervisorScopeLabel } from "../../lib/supervisorScope";
 import PresenceBadge from "../admin/users/PresenceBadge";
+import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
 
 export default function SupervisorTeamPage({ profile }) {
-  const [teamProfiles, setTeamProfiles] = useState([]);
   const [filters, setFilters] = useState({ branch: "All", status: "All", q: "" });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadProfiles();
-    const channel = supabase
-      .channel("supervisor-team-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, loadProfiles)
-      .on("postgres_changes", { event: "*", schema: "public", table: "employee_presence" }, loadProfiles)
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, [profile?.location, profile?.branch]);
-
-  async function loadProfiles() {
-    setLoading(true);
-
-    const [profilesRes, presenceRes] = await Promise.all([
-      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
-      supabase.from("employee_presence").select("user_id,last_seen_at"),
-    ]);
-
-    if (!profilesRes.error && !presenceRes.error) {
-      const presenceMap = new Map((presenceRes.data ?? []).map((row) => [row.user_id, row.last_seen_at]));
-      const scoped = (profilesRes.data ?? [])
-        .filter((item) => isScopedEmployee(item, profile))
-        .map((item) => ({
-          ...item,
-          last_seen_at: presenceMap.get(item.id) ?? null,
-        }));
-
-      const withSignedAvatars = await attachSignedUrls(scoped, "documents", "avatar_url");
-      setTeamProfiles(withSignedAvatars);
-    }
-
-    setLoading(false);
-  }
+  const { profiles: teamProfiles, loading } = useLivePeopleStore({
+    currentRole: "supervisor",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
 
   const branchOptions = useMemo(() => ["All", ...sortBranches(Array.from(new Set(teamProfiles.map((item) => item.branch).filter(Boolean))))], [teamProfiles]);
 

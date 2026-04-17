@@ -15,9 +15,11 @@ const AdminRequirementsPage = lazy(() => import("./features/admin/AdminRequireme
 const AdminReportsPage = lazy(() => import("./features/admin/AdminReportsPage"));
 const AdminUsersPage = lazy(() => import("./features/admin/AdminUsersPage"));
 const AdminSettingsPage = lazy(() => import("./features/admin/AdminSettingsPage"));
+const AdminMessagesPage = lazy(() => import("./features/admin/AdminMessagesPage"));
 const SupervisorLayout = lazy(() => import("./features/supervisor/SupervisorLayout"));
 const SupervisorDashboardHome = lazy(() => import("./features/supervisor/SupervisorDashboardHome"));
 const SupervisorDtrPage = lazy(() => import("./features/supervisor/SupervisorDtrPage"));
+const SupervisorMessagesPage = lazy(() => import("./features/supervisor/SupervisorMessagesPage"));
 const SupervisorTeamPage = lazy(() => import("./features/supervisor/SupervisorTeamPage"));
 const SupervisorSettingsPage = lazy(() => import("./features/supervisor/SupervisorSettingsPage"));
 
@@ -59,15 +61,16 @@ export default function App() {
             />
           }
         >
-          <Route
-            element={<RoleRoute allowedRole="admin" profile={profile} fallback="/" />}
-          >
+            <Route
+              element={<RoleRoute allowedRole="admin" profile={profile} fallback="/" />}
+            >
             <Route path="/admin" element={<AdminLayout profile={profile} />}>
               <Route index element={<AdminDashboardHome profile={profile} />} />
-              <Route path="dtr-submissions" element={<AdminDtrPage />} />
-              <Route path="requirements" element={<AdminRequirementsPage />} />
-              <Route path="users" element={<AdminUsersPage />} />
-              <Route path="reports" element={<AdminReportsPage />} />
+              <Route path="dtr-submissions" element={<AdminDtrPage profile={profile} />} />
+              <Route path="requirements" element={<AdminRequirementsPage profile={profile} />} />
+              <Route path="users" element={<AdminUsersPage profile={profile} />} />
+              <Route path="messages" element={<AdminMessagesPage profile={profile} />} />
+              <Route path="reports" element={<AdminReportsPage profile={profile} />} />
               <Route
                 path="settings"
                 element={<AdminSettingsPage profile={profile} refreshProfile={refreshProfile} />}
@@ -81,6 +84,7 @@ export default function App() {
             <Route path="/supervisor" element={<SupervisorLayout profile={profile} />}>
               <Route index element={<SupervisorDashboardHome profile={profile} />} />
               <Route path="dtr" element={<SupervisorDtrPage profile={profile} />} />
+              <Route path="messages" element={<SupervisorMessagesPage profile={profile} />} />
               <Route path="team" element={<SupervisorTeamPage profile={profile} />} />
               <Route
                 path="settings"

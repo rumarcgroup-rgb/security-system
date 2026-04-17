@@ -29,6 +29,7 @@
 }
 
 .supervisor-layout__mobile-link {
+  position: relative;
   display: inline-flex;
   flex: 1 0 auto;
   align-items: center;
@@ -48,6 +49,20 @@
 .supervisor-layout__mobile-link--active {
   border-color: #16a34a;
   background: #16a34a;
+  color: #fff;
+}
+
+.supervisor-layout__mobile-badge {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.45rem;
+  min-width: 1rem;
+  border-radius: 999px;
+  background: #f43f5e;
+  padding: 0 0.25rem;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
   color: #fff;
 }
 

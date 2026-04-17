@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, CheckCircle2, Clock3, FileText, Users } from "lucide-react";
-import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { sortBranches } from "../../lib/branches";
 import { isEmployeeOnline } from "../../lib/presence";
-import { supabase } from "../../lib/supabase";
-import { getSupervisorScopeLabel, isScopedEmployee, matchesSupervisorScope } from "../../lib/supervisorScope";
+import { getSupervisorScopeLabel } from "../../lib/supervisorScope";
+import PresenceBadge from "../admin/users/PresenceBadge";
+import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
+import { useLiveRequirementsStore } from "../realtime/useLiveRequirementsStore";
+import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
 import "../admin/AdminDashboardHome.css";
 
 const metricCards = [
@@ -19,174 +21,35 @@ const metricCards = [
 ];
 
 export default function SupervisorDashboardHome({ profile }) {
-  const [dtrRows, setDtrRows] = useState([]);
-  const [requirementRows, setRequirementRows] = useState([]);
-  const [teamProfiles, setTeamProfiles] = useState([]);
   const [highlightedDtrId, setHighlightedDtrId] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { rows: dtrRows, loading: dtrLoading, lastEvent: lastDtrEvent } = useLiveDtrStore({
+    currentRole: "supervisor",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
+  const { rows: requirementRows, loading: requirementsLoading } = useLiveRequirementsStore({
+    currentRole: "supervisor",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
+  const { profiles: teamProfiles, loading: peopleLoading } = useLivePeopleStore({
+    currentRole: "supervisor",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
 
   useEffect(() => {
-    loadData();
+    if (lastDtrEvent?.eventType !== "INSERT" || !lastDtrEvent.row?.id) {
+      return;
+    }
 
-    const dtrChannel = supabase
-      .channel("supervisor-dashboard-dtr")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, handleDtrChange)
-      .subscribe();
-
-    const documentsChannel = supabase
-      .channel("supervisor-dashboard-documents")
-      .on("postgres_changes", { event: "*", schema: "public", table: "employee_documents" }, handleRequirementChange)
-      .subscribe();
-
-    const profilesChannel = supabase
-      .channel("supervisor-dashboard-profiles")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, loadData)
-      .subscribe();
-
-    const presenceChannel = supabase
-      .channel("supervisor-dashboard-presence")
-      .on("postgres_changes", { event: "*", schema: "public", table: "employee_presence" }, loadData)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(dtrChannel);
-      supabase.removeChannel(documentsChannel);
-      supabase.removeChannel(profilesChannel);
-      supabase.removeChannel(presenceChannel);
-    };
-  }, [profile?.location, profile?.branch]);
-
-  function upsertScopedDtrRow(nextRow) {
-    setDtrRows((current) =>
-      [nextRow, ...current.filter((row) => row.id !== nextRow.id)].sort(
-        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-      )
-    );
-  }
-
-  function upsertScopedRequirementRow(nextRow) {
-    setRequirementRows((current) =>
-      [nextRow, ...current.filter((row) => row.id !== nextRow.id)].sort(
-        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-      )
-    );
-  }
-
-  function flashNewDtr(id) {
-    setHighlightedDtrId(id);
+    setHighlightedDtrId(lastDtrEvent.row.id);
     window.setTimeout(() => {
-      setHighlightedDtrId((current) => (current === id ? null : current));
+      setHighlightedDtrId((current) => (current === lastDtrEvent.row.id ? null : current));
     }, 2200);
-  }
+  }, [lastDtrEvent]);
 
-  async function handleDtrChange(payload) {
-    if (payload.eventType === "DELETE") {
-      setDtrRows((current) => current.filter((row) => row.id !== payload.old.id));
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("dtr_submissions")
-      .select("id,status,cutoff,created_at,approved_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location,branch)")
-      .eq("id", payload.new.id)
-      .maybeSingle();
-
-    if (error || !data) {
-      loadData();
-      return;
-    }
-
-    if (!matchesSupervisorScope(data, profile)) {
-      setDtrRows((current) => current.filter((row) => row.id !== data.id));
-      return;
-    }
-
-    upsertScopedDtrRow(data);
-
-    if (payload.eventType === "INSERT") {
-      flashNewDtr(data.id);
-      toast.success("New DTR received.");
-    }
-  }
-
-  async function handleRequirementChange(payload) {
-    if (payload.eventType === "DELETE") {
-      setRequirementRows((current) => current.filter((row) => row.id !== payload.old.id));
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("employee_documents")
-      .select("id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(full_name,employee_id,location,branch)")
-      .eq("id", payload.new.id)
-      .maybeSingle();
-
-    if (error || !data) {
-      loadData();
-      return;
-    }
-
-    if (!matchesSupervisorScope(data, profile)) {
-      setRequirementRows((current) => current.filter((row) => row.id !== data.id));
-      return;
-    }
-
-    upsertScopedRequirementRow(data);
-
-    if (payload.eventType === "INSERT") {
-      toast("New requirement received.", {
-        duration: 2200,
-        icon: "📄",
-        style: {
-          border: "1px solid #dcfce7",
-          background: "#f0fdf4",
-          color: "#166534",
-        },
-      });
-    }
-  }
-
-  async function loadData() {
-    setLoading(true);
-
-    const [dtrRes, documentsRes, profilesRes, presenceRes] = await Promise.all([
-      supabase
-        .from("dtr_submissions")
-        .select("id,status,cutoff,created_at,approved_at,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,employee_id,location,branch)")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("employee_documents")
-        .select("id,document_type,review_status,created_at,profiles:profiles!employee_documents_user_id_profile_fkey(full_name,employee_id,location,branch)")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("profiles")
-        .select("id,role,full_name,employee_id,position,location,branch,created_at")
-        .order("created_at", { ascending: false }),
-      supabase.from("employee_presence").select("user_id,last_seen_at"),
-    ]);
-
-    if (!dtrRes.error) {
-      setDtrRows((dtrRes.data ?? []).filter((row) => matchesSupervisorScope(row, profile)));
-    }
-
-    if (!documentsRes.error) {
-      setRequirementRows((documentsRes.data ?? []).filter((row) => matchesSupervisorScope(row, profile)));
-    }
-
-    if (!profilesRes.error && !presenceRes.error) {
-      const presenceMap = new Map((presenceRes.data ?? []).map((row) => [row.user_id, row.last_seen_at]));
-      setTeamProfiles(
-        (profilesRes.data ?? [])
-          .filter((item) => isScopedEmployee(item, profile))
-          .map((item) => ({
-            ...item,
-            last_seen_at: presenceMap.get(item.id) ?? null,
-          }))
-      );
-    }
-
-    setLoading(false);
-  }
+  const loading = dtrLoading || requirementsLoading || peopleLoading;
 
   const metrics = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -194,7 +57,7 @@ export default function SupervisorDashboardHome({ profile }) {
     return {
       teamMembers: teamProfiles.length,
       pendingDtr: dtrRows.filter((row) => row.status === "Pending Review").length,
-      pendingRequirements: requirementRows.filter((row) => row.review_status === "Pending Review").length,
+      pendingRequirements: requirementRows.filter((row) => row.status === "Pending Review").length,
       onlineEmployees: teamProfiles.filter((item) => isEmployeeOnline(item.last_seen_at)).length,
       approvedToday: dtrRows.filter(
         (row) => row.status === "Approved" && row.approved_at && new Date(row.approved_at).toISOString().slice(0, 10) === today
@@ -212,6 +75,20 @@ export default function SupervisorDashboardHome({ profile }) {
 
     return sortBranches(Object.keys(grouped)).map((branch) => ({ branch, count: grouped[branch] })).slice(0, 5);
   }, [dtrRows]);
+
+  const teamPreviewProfiles = useMemo(() => {
+    return [...teamProfiles]
+      .sort((left, right) => {
+        const onlineDifference = Number(isEmployeeOnline(right.last_seen_at)) - Number(isEmployeeOnline(left.last_seen_at));
+        if (onlineDifference !== 0) return onlineDifference;
+
+        const branchDifference = (left.branch || left.location || "").localeCompare(right.branch || right.location || "");
+        if (branchDifference !== 0) return branchDifference;
+
+        return (left.full_name || "").localeCompare(right.full_name || "");
+      })
+      .slice(0, 6);
+  }, [teamProfiles]);
 
   if (!profile?.location) {
     return <p className="admin-empty-copy">This supervisor account needs an assigned area before the dashboard can load team data.</p>;
@@ -261,6 +138,41 @@ export default function SupervisorDashboardHome({ profile }) {
       </div>
 
       <div className="admin-sections-grid admin-sections-grid--analytics">
+        <Card>
+          <div className="admin-section-head">
+            <div>
+              <h2 className="admin-section-title admin-dashboard-home__section-title">Team Preview</h2>
+              <p className="admin-section-copy">
+                {teamProfiles.length > 0
+                  ? `Showing ${Math.min(teamPreviewProfiles.length, teamProfiles.length)} of ${teamProfiles.length} guard${teamProfiles.length === 1 ? "" : "s"} in your scope.`
+                  : "Live guard roster for your assigned supervisor scope."}
+              </p>
+            </div>
+            <Link className="admin-link" to="/supervisor/team">
+              Open Team Directory
+            </Link>
+          </div>
+
+          {teamPreviewProfiles.length === 0 ? (
+            <div className="app-empty-box">No guards are currently assigned under this supervisor scope.</div>
+          ) : (
+            <div className="supervisor-dashboard-home__team-list">
+              {teamPreviewProfiles.map((item) => (
+                <div key={item.id} className="admin-list-card supervisor-dashboard-home__team-item">
+                  <div className="supervisor-dashboard-home__team-main">
+                    <p className="admin-dashboard-home__activity-name">{item.full_name || "Unnamed Guard"}</p>
+                    <p className="app-copy-sm">{item.employee_id || "No employee ID assigned"}</p>
+                    <p className="app-copy-xs-muted">
+                      {(item.branch || item.location || "No branch assigned")}{item.shift ? ` | ${item.shift}` : " | Shift not set"}
+                    </p>
+                  </div>
+                  <PresenceBadge lastSeenAt={item.last_seen_at} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
         <Card>
           <div className="admin-section-head">
             <div>

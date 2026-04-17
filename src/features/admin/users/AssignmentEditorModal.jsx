@@ -7,9 +7,11 @@ export default function AssignmentEditorModal({
   assignmentForm,
   assignmentBranchOptions,
   areaOptions,
+  isEmployeeAssignment,
   isSupervisorAssignment,
   positionOptions,
   savingAssignment,
+  supervisorOptions,
   onClose,
   onSave,
   onChange,
@@ -57,6 +59,17 @@ export default function AssignmentEditorModal({
             ))}
           </Select>
         )}
+
+        {isEmployeeAssignment ? (
+          <Select label="Assigned Supervisor" value={assignmentForm.supervisor_user_id} onChange={(e) => onChange("supervisor_user_id", e.target.value)}>
+            <option value="">No supervisor assigned</option>
+            {supervisorOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.full_name || option.employee_id || option.id}
+              </option>
+            ))}
+          </Select>
+        ) : null}
 
         <div className="app-modal-footer">
           <Button variant="secondary" onClick={onClose} disabled={savingAssignment}>

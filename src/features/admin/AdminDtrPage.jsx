@@ -10,8 +10,8 @@ import Modal from "../../components/ui/Modal";
 import { getBranchesForArea, sortBranches } from "../../lib/branches";
 import { sortAreas } from "../../lib/areas";
 import { supabase } from "../../lib/supabase";
-import { attachSignedUrls } from "../../lib/storage";
 import { mergeCutoffOptions } from "../../lib/dtr";
+import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
 import "./AdminDtrPage.css";
 
 const statusOptions = ["All", "Pending Review", "Approved", "Rejected"];
@@ -27,34 +27,18 @@ function getSubmitSourceLabel(item) {
   return item.submitted_by_role === "supervisor" ? "Supervisor Submitted" : "Employee Submitted";
 }
 
-export default function AdminDtrPage() {
-  const [rows, setRows] = useState([]);
+export default function AdminDtrPage({ profile }) {
   const [filters, setFilters] = useState({ area: "All", branch: "All", cutoff: "All", status: "All", source: "All", q: "", sort: "oldest-pending" });
   const [reviewItem, setReviewItem] = useState(null);
   const [adminRemarks, setAdminRemarks] = useState("");
   const [bulkRemarks, setBulkRemarks] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
-
-  useEffect(() => {
-    loadRows();
-    const channel = supabase
-      .channel("admin-dtr-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dtr_submissions" }, loadRows)
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, []);
-
-  async function loadRows() {
-    const { data, error } = await supabase
-      .from("dtr_submissions")
-      .select("id,user_id,cutoff,employee_note,admin_remarks,file_url,status,approved_at,created_at,submitted_by_role,submitted_by_user_id,profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name,role,employee_id,location,branch)")
-      .order("created_at", { ascending: false });
-    if (!error) {
-      const withSignedUrls = await attachSignedUrls(data || [], "dtr-images");
-      setRows(withSignedUrls);
-    }
-  }
+  const { rows, loading, patchRowsByIds, syncNow } = useLiveDtrStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
 
   const areas = useMemo(() => {
     const list = Array.from(new Set(rows.map((r) => r.profiles?.location).filter(Boolean)));
@@ -214,25 +198,29 @@ export default function AdminDtrPage() {
 
   useEffect(() => {
     setSelectedIds((current) => current.filter((id) => rows.some((row) => row.id === id)));
+    setReviewItem((current) => {
+      if (!current) return null;
+      return rows.find((row) => row.id === current.id) || null;
+    });
   }, [rows]);
 
   async function updateStatus(status) {
     if (!reviewItem) return;
-    setLoading(true);
+    setSaving(true);
     const payload = {
       status,
       admin_remarks: adminRemarks.trim() || null,
       approved_at: status === "Approved" ? new Date().toISOString() : null,
     };
     const { error } = await supabase.from("dtr_submissions").update(payload).eq("id", reviewItem.id);
-    setLoading(false);
+    setSaving(false);
     if (error) {
       toast.error(error.message);
     } else {
+      patchRowsByIds([reviewItem.id], payload);
       toast.success(`Marked as ${status}`);
       setAdminRemarks("");
       setReviewItem(null);
-      loadRows();
     }
   }
 
@@ -242,45 +230,45 @@ export default function AdminDtrPage() {
       return;
     }
 
-    setLoading(true);
+    setSaving(true);
     const payload = {
       status,
       admin_remarks: bulkRemarks.trim() || null,
       approved_at: status === "Approved" ? new Date().toISOString() : null,
     };
     const { error } = await supabase.from("dtr_submissions").update(payload).in("id", selectedVisibleIds);
-    setLoading(false);
+    setSaving(false);
 
     if (error) {
       toast.error(error.message);
       return;
     }
 
+    patchRowsByIds(selectedVisibleIds, payload);
     toast.success(`Marked ${selectedVisibleIds.length} submission(s) as ${status}`);
     setSelectedIds([]);
     setBulkRemarks("");
-    loadRows();
   }
 
   async function quickUpdateStatus(item, status) {
-    setLoading(true);
+    setSaving(true);
     const payload = {
       status,
       approved_at: status === "Approved" ? new Date().toISOString() : null,
     };
     const { error } = await supabase.from("dtr_submissions").update(payload).eq("id", item.id);
-    setLoading(false);
+    setSaving(false);
 
     if (error) {
       toast.error(error.message);
       return;
     }
 
+    patchRowsByIds([item.id], payload);
     toast.success(`${item.profiles?.full_name || "Submission"} marked as ${status}`);
     if (reviewItem?.id === item.id) {
       closeReview();
     }
-    loadRows();
   }
 
   function toggleSelected(id) {
@@ -437,8 +425,8 @@ export default function AdminDtrPage() {
             </div>
           </label>
           <div className="admin-filter-actions">
-            <Button className="admin-button-full" onClick={loadRows}>
-              Filter
+            <Button className="admin-button-full" onClick={() => syncNow({ showLoading: false })}>
+              Refresh
             </Button>
             <Button
               className="admin-button-full"
@@ -473,18 +461,18 @@ export default function AdminDtrPage() {
             <Button
               variant="secondary"
               onClick={() => setSelectedIds((current) => current.filter((id) => !visibleSelectableIds.includes(id)))}
-              disabled={selectedCount === 0 || loading}
+              disabled={selectedCount === 0 || saving}
             >
               Clear Selection
             </Button>
-            <Button variant="secondary" onClick={() => updateBulkStatus("Pending Review")} loading={loading} disabled={selectedCount === 0}>
+            <Button variant="secondary" onClick={() => updateBulkStatus("Pending Review")} loading={saving} disabled={selectedCount === 0}>
               <RotateCcw size={15} />
               Return Pending ({selectedCount})
             </Button>
-            <Button variant="danger" onClick={() => updateBulkStatus("Rejected")} loading={loading} disabled={selectedCount === 0}>
+            <Button variant="danger" onClick={() => updateBulkStatus("Rejected")} loading={saving} disabled={selectedCount === 0}>
               Reject Selected ({selectedCount})
             </Button>
-            <Button onClick={() => updateBulkStatus("Approved")} loading={loading} disabled={selectedCount === 0}>
+            <Button onClick={() => updateBulkStatus("Approved")} loading={saving} disabled={selectedCount === 0}>
               <Check size={15} />
               Approve Selected ({selectedCount})
             </Button>
@@ -591,7 +579,7 @@ export default function AdminDtrPage() {
                                 <Button
                                   className="app-compact-button"
                                   onClick={() => quickUpdateStatus(item, "Approved")}
-                                  loading={loading}
+                                  loading={saving}
                                 >
                                   Approve
                                 </Button>
@@ -599,7 +587,7 @@ export default function AdminDtrPage() {
                                   className="app-compact-button"
                                   variant="danger"
                                   onClick={() => quickUpdateStatus(item, "Rejected")}
-                                  loading={loading}
+                                  loading={saving}
                                 >
                                   Reject
                                 </Button>
@@ -712,13 +700,13 @@ export default function AdminDtrPage() {
               />
             </label>
             <div className="app-modal-footer">
-              <Button variant="secondary" onClick={() => updateStatus("Pending Review")} loading={loading}>
+              <Button variant="secondary" onClick={() => updateStatus("Pending Review")} loading={saving}>
                 Return Pending
               </Button>
-              <Button variant="danger" onClick={() => updateStatus("Rejected")} loading={loading}>
+              <Button variant="danger" onClick={() => updateStatus("Rejected")} loading={saving}>
                 Reject
               </Button>
-              <Button onClick={() => updateStatus("Approved")} loading={loading}>
+              <Button onClick={() => updateStatus("Approved")} loading={saving}>
                 Approve
               </Button>
             </div>
