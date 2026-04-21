@@ -228,6 +228,17 @@
   transition: transform 0.2s ease;
 }
 
+.admin-dtr-page__review-modal {
+  max-width: min(1120px, calc(100vw - 2rem));
+}
+
+.admin-dtr-page__review-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
 .app-preview-image-link:hover .admin-dtr-page__modal-preview-image {
   transform: scale(1.01);
 }
@@ -237,6 +248,10 @@
 }
 
 @media (max-width: 767px) {
+  .admin-dtr-page__review-workspace {
+    grid-template-columns: 1fr;
+  }
+
   .admin-dtr-page__bulk-remarks {
     flex-basis: 100%;
   }

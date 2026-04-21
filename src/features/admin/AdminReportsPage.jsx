@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import { sortAreas } from "../../lib/areas";
+import { getDtrExtractionStatus, getDtrExtractionTotals } from "../../lib/dtrExtraction";
 import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
 import "./AdminReportsPage.css";
 
@@ -143,6 +144,55 @@ export default function AdminReportsPage({ profile }) {
     URL.revokeObjectURL(url);
   }
 
+  function exportVerifiedPayrollCsv() {
+    const verifiedRows = rows.filter((row) => getDtrExtractionStatus(row) === "verified");
+    const headers = [
+      "Guard",
+      "Employee ID",
+      "Location",
+      "Branch",
+      "Cutoff",
+      "DTR Status",
+      "Submitted At",
+      "Approved At",
+      "Days Present",
+      "Regular Hours",
+      "Overtime Hours",
+      "Late Minutes",
+      "Undertime Minutes",
+      "Absences",
+      "Admin Remarks",
+    ];
+    const csvRows = verifiedRows.map((row) => {
+      const totals = getDtrExtractionTotals(row);
+      return [
+        row.profiles?.full_name,
+        row.profiles?.employee_id,
+        row.profiles?.location,
+        row.profiles?.branch,
+        row.cutoff,
+        row.status,
+        row.created_at,
+        row.approved_at,
+        totals.days_present,
+        totals.regular_hours,
+        totals.overtime_hours,
+        totals.late_minutes,
+        totals.undertime_minutes,
+        totals.absences,
+        row.admin_remarks,
+      ];
+    });
+    const csv = [headers, ...csvRows].map((line) => line.map(csvValue).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `verified-payroll-dtr-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (loading) {
     return <p className="admin-loading-copy">Loading report analytics...</p>;
   }
@@ -155,9 +205,14 @@ export default function AdminReportsPage({ profile }) {
             <h2 className="admin-section-title admin-reports-page__section-title">Report Exports</h2>
             <p className="admin-section-copy">Download the live DTR dataset for payroll review, audit checks, or spreadsheet cleanup.</p>
           </div>
-          <Button onClick={exportDtrCsv} disabled={rows.length === 0}>
-            Export DTR CSV
-          </Button>
+          <div className="admin-reports-page__export-actions">
+            <Button variant="secondary" onClick={exportDtrCsv} disabled={rows.length === 0}>
+              Export DTR CSV
+            </Button>
+            <Button onClick={exportVerifiedPayrollCsv} disabled={rows.every((row) => getDtrExtractionStatus(row) !== "verified")}>
+              Export Verified Payroll CSV
+            </Button>
+          </div>
         </div>
       </Card>
 

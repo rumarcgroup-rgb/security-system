@@ -2,6 +2,7 @@ import { Camera, ExternalLink, ImageUp } from "lucide-react";
 import Button from "../../../components/ui/Button";
 import Modal from "../../../components/ui/Modal";
 import StatusBadge from "../../../components/ui/StatusBadge";
+import { getDtrExtractionStatusLabel, getPrimaryDtrExtraction } from "../../../lib/dtrExtraction";
 import { formatDateTime } from "../employeeDashboardUtils";
 
 const REUPLOADABLE_STATUSES = new Set(["Pending Review", "Rejected"]);
@@ -29,6 +30,8 @@ export default function EmployeeDtrReviewModal({
   );
   const isApproved = submission?.status === "Approved";
   const isRejected = submission?.status === "Rejected";
+  const extraction = getPrimaryDtrExtraction(submission);
+  const extractionLabel = getDtrExtractionStatusLabel(extraction?.status);
 
   return (
     <Modal
@@ -52,6 +55,7 @@ export default function EmployeeDtrReviewModal({
               <ReviewField label="Submitted" value={formatDateTime(submission.created_at)} />
               <ReviewField label="Approved" value={submission.approved_at ? formatDateTime(submission.approved_at) : "Not approved yet"} />
               <ReviewField label="Source" value={submission.submitted_by_role === "supervisor" ? "Submitted by supervisor" : "Submitted by guard"} />
+              <ReviewField label="Payroll Draft" value={extractionLabel} />
               <ReviewField label="Reference" value={submission.id} />
             </div>
 

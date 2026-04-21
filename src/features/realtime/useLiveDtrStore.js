@@ -17,11 +17,34 @@ const DTR_SELECT = `
   created_at,
   submitted_by_role,
   submitted_by_user_id,
-  profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name, role, employee_id, location, branch, supervisor_user_id)
+  profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name, role, employee_id, location, branch, supervisor_user_id),
+  dtr_extractions:dtr_extractions!dtr_extractions_submission_id_fkey(
+    id,
+    submission_id,
+    source_file_url,
+    status,
+    extracted_data,
+    confidence_score,
+    verified_by_user_id,
+    verified_at,
+    error_message,
+    created_at,
+    updated_at
+  )
 `;
 
 function sortDtrRows(rows = []) {
   return [...rows].sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
+}
+
+function normalizeDtrRow(row) {
+  if (!row) return row;
+  const extraction = Array.isArray(row.dtr_extractions) ? row.dtr_extractions[0] || null : row.dtr_extractions || null;
+  return {
+    ...row,
+    dtr_extraction: extraction,
+    dtr_extractions: extraction ? [extraction] : [],
+  };
 }
 
 function getScopeKey({ currentRole, currentUserId, scopeProfile }) {
@@ -67,7 +90,8 @@ async function fetchDtrRows(params, { userId = null } = {}) {
   const { data, error } = await query;
   if (error) throw error;
 
-  const withSignedUrls = await attachSignedUrls(data ?? [], "dtr-images");
+  const normalizedRows = (data ?? []).map(normalizeDtrRow);
+  const withSignedUrls = await attachSignedUrls(normalizedRows, "dtr-images");
   return sortDtrRows(withSignedUrls.filter((row) => isRelevantDtrRow(row, params)));
 }
 
@@ -78,7 +102,7 @@ async function fetchDtrRowById(rowId, params) {
   if (error) throw error;
   if (!data) return null;
 
-  const [withSignedUrl] = await attachSignedUrls([data], "dtr-images");
+  const [withSignedUrl] = await attachSignedUrls([normalizeDtrRow(data)], "dtr-images");
   return isRelevantDtrRow(withSignedUrl, params) ? withSignedUrl : null;
 }
 
@@ -172,6 +196,22 @@ function createDtrStore(params) {
             emitToast: true,
           });
         })
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "dtr_extractions",
+          },
+          (payload) => {
+            const submissionId = payload.new?.submission_id || payload.old?.submission_id;
+            void syncRowById(submissionId, {
+              eventType: payload.eventType,
+              emitLastEvent: true,
+              emitToast: false,
+            });
+          }
+        )
         .on("postgres_changes", profileSubscription, (payload) => {
           const userId = payload.new?.id || payload.old?.id;
           void syncRowsByUserId(userId);

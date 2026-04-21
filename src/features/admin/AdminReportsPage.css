@@ -15,6 +15,13 @@
   margin-bottom: 1rem;
 }
 
+.admin-reports-page__export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
 .admin-reports-page__bar--approved {
   background: #10b981;
 }
@@ -90,6 +97,14 @@
 }
 
 @media (max-width: 767px) {
+  .admin-reports-page__export-actions {
+    width: 100%;
+  }
+
+  .admin-reports-page__export-actions > button {
+    flex: 1 1 180px;
+  }
+
   .admin-reports-page__trend-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

@@ -254,6 +254,17 @@
   max-height: 60vh;
 }
 
+.supervisor-dtr-page__review-modal {
+  max-width: min(1120px, calc(100vw - 2rem));
+}
+
+.supervisor-dtr-page__review-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
 @media (max-width: 767px) {
   .supervisor-dtr-page__header-actions {
     width: 100%;
@@ -278,6 +289,10 @@
 
   .supervisor-dtr-page__modal-preview {
     max-height: 46vh;
+  }
+
+  .supervisor-dtr-page__review-workspace {
+    grid-template-columns: 1fr;
   }
 
   .supervisor-dtr-page__selection-head {

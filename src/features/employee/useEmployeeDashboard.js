@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabase";
+import { triggerDtrExtraction } from "../../lib/dtrExtraction";
 import { clearStoredEmployeePortalType } from "../../lib/employeePortal";
 import {
   CIVIL_STATUS_OPTIONS,
@@ -83,6 +84,18 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
   const submissions = dtrStore.rows;
   const documentsLoading = requirementsStore.loading;
   const profileRequestLoading = peopleStore.loading;
+
+  function startDtrExtractionInBackground(submissionId) {
+    if (!submissionId) return;
+
+    void triggerDtrExtraction(submissionId)
+      .then(() => dtrStore.syncRowById(submissionId))
+      .catch((error) => {
+        // Extraction is helpful, but DTR submission itself must remain reliable.
+        console.warn("DTR extraction did not complete:", error);
+        void dtrStore.syncRowById(submissionId);
+      });
+  }
 
   useEffect(() => {
     if (!editProfileImageFile) {
@@ -240,6 +253,7 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
         approved_at: null,
       });
       setDtrReuploadFile(null);
+      startDtrExtractionInBackground(activeDtrReview.id);
       toast.success("DTR replacement submitted for review.");
     } catch (err) {
       toast.error(err.message || "Unable to reupload DTR.");
@@ -280,6 +294,7 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
       setFile(null);
       setEmployeeNote("");
       await dtrStore.syncRowById(insertedSubmission.id);
+      startDtrExtractionInBackground(insertedSubmission.id);
       toast.success("DTR submitted successfully.");
     } catch (err) {
       toast.error(err.message || "Submission failed");

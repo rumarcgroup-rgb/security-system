@@ -120,6 +120,20 @@ create table if not exists public.audit_logs (
   created_at timestamptz default now()
 );
 
+create table if not exists public.dtr_extractions (
+  id uuid primary key default gen_random_uuid(),
+  submission_id uuid not null unique references public.dtr_submissions(id) on delete cascade,
+  source_file_url text not null,
+  status text not null default 'processing',
+  extracted_data jsonb not null default '{}'::jsonb,
+  confidence_score numeric,
+  verified_by_user_id uuid references public.profiles(id) on delete set null,
+  verified_at timestamptz,
+  error_message text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 alter table public.profiles
   add column if not exists signature_status text not null default 'Pending Review';
 
@@ -214,6 +228,30 @@ alter table public.message_read_states
   add column if not exists last_read_at timestamptz default now();
 
 alter table public.message_read_states
+  add column if not exists updated_at timestamptz default now();
+
+alter table public.dtr_extractions
+  add column if not exists source_file_url text;
+
+alter table public.dtr_extractions
+  add column if not exists status text not null default 'processing';
+
+alter table public.dtr_extractions
+  add column if not exists extracted_data jsonb not null default '{}'::jsonb;
+
+alter table public.dtr_extractions
+  add column if not exists confidence_score numeric;
+
+alter table public.dtr_extractions
+  add column if not exists verified_by_user_id uuid references public.profiles(id) on delete set null;
+
+alter table public.dtr_extractions
+  add column if not exists verified_at timestamptz;
+
+alter table public.dtr_extractions
+  add column if not exists error_message text;
+
+alter table public.dtr_extractions
   add column if not exists updated_at timestamptz default now();
 
 update public.profiles
@@ -341,6 +379,16 @@ begin
       add constraint message_messages_body_check
       check (char_length(btrim(coalesce(body, ''))) > 0);
   end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'dtr_extractions_status_check'
+  ) then
+    alter table public.dtr_extractions
+      add constraint dtr_extractions_status_check
+      check (status in ('processing', 'draft', 'verified', 'needs_review', 'failed'));
+  end if;
 end
 $$;
 
@@ -372,6 +420,9 @@ create unique index if not exists idx_message_threads_open_route_unique
 create index if not exists idx_message_messages_thread_id on public.message_messages(thread_id, created_at);
 create index if not exists idx_message_messages_sender_user_id on public.message_messages(sender_user_id);
 create index if not exists idx_message_read_states_user_id on public.message_read_states(user_id);
+create index if not exists idx_dtr_extractions_submission_id on public.dtr_extractions(submission_id);
+create index if not exists idx_dtr_extractions_status on public.dtr_extractions(status);
+create index if not exists idx_dtr_extractions_verified_at on public.dtr_extractions(verified_at desc);
 create index if not exists idx_audit_logs_created_at on public.audit_logs(created_at desc);
 create index if not exists idx_audit_logs_table_name on public.audit_logs(table_name);
 create index if not exists idx_audit_logs_target_user_id on public.audit_logs(target_user_id);
@@ -384,6 +435,7 @@ alter table public.profile_change_requests enable row level security;
 alter table public.message_threads enable row level security;
 alter table public.message_messages enable row level security;
 alter table public.message_read_states enable row level security;
+alter table public.dtr_extractions enable row level security;
 alter table public.audit_logs enable row level security;
 
 do $$
@@ -478,6 +530,16 @@ begin
       from pg_publication_tables
       where pubname = 'supabase_realtime'
         and schemaname = 'public'
+        and tablename = 'dtr_extractions'
+    ) then
+      alter publication supabase_realtime add table public.dtr_extractions;
+    end if;
+
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
         and tablename = 'audit_logs'
     ) then
       alter publication supabase_realtime add table public.audit_logs;
@@ -531,6 +593,7 @@ declare
     'message_threads',
     'message_messages',
     'message_read_states',
+    'dtr_extractions',
     'audit_logs'
   ];
   realtime_enabled boolean;
@@ -1038,6 +1101,145 @@ $$;
 revoke all on function public.employee_reupload_dtr_submission(uuid, text, text) from public;
 grant execute on function public.employee_reupload_dtr_submission(uuid, text, text) to authenticated, service_role;
 
+create or replace function public.reset_dtr_extraction_after_dtr_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  insert into public.dtr_extractions (
+    submission_id,
+    source_file_url,
+    status,
+    extracted_data,
+    confidence_score,
+    verified_by_user_id,
+    verified_at,
+    error_message,
+    updated_at
+  )
+  values (
+    new.id,
+    new.file_url,
+    'processing',
+    '{}'::jsonb,
+    null,
+    null,
+    null,
+    null,
+    now()
+  )
+  on conflict (submission_id) do update
+  set
+    source_file_url = excluded.source_file_url,
+    status = 'processing',
+    extracted_data = '{}'::jsonb,
+    confidence_score = null,
+    verified_by_user_id = null,
+    verified_at = null,
+    error_message = null,
+    updated_at = now();
+
+  return new;
+end;
+$$;
+
+drop trigger if exists dtr_submissions_reset_extraction_after_change on public.dtr_submissions;
+create trigger dtr_submissions_reset_extraction_after_change
+after insert or update of file_url on public.dtr_submissions
+for each row execute function public.reset_dtr_extraction_after_dtr_change();
+
+create or replace function public.review_dtr_extraction(
+  target_submission_id uuid,
+  next_extracted_data jsonb,
+  next_status text default 'draft'
+)
+returns public.dtr_extractions
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  target_submission public.dtr_submissions;
+  updated_extraction public.dtr_extractions;
+  next_confidence numeric;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required.';
+  end if;
+
+  if target_submission_id is null then
+    raise exception 'DTR submission is required.';
+  end if;
+
+  if next_status not in ('draft', 'verified', 'needs_review') then
+    raise exception 'Invalid extraction review status.';
+  end if;
+
+  select *
+  into target_submission
+  from public.dtr_submissions
+  where id = target_submission_id;
+
+  if not found then
+    raise exception 'DTR submission not found.';
+  end if;
+
+  if not (
+    public.is_admin(auth.uid())
+    or public.is_supervisor_for_employee(target_submission.user_id, auth.uid())
+  ) then
+    raise exception 'You do not have access to review this extraction.';
+  end if;
+
+  begin
+    next_confidence := nullif(next_extracted_data ->> 'overall_confidence', '')::numeric;
+  exception
+    when others then
+      next_confidence := null;
+  end;
+
+  insert into public.dtr_extractions (
+    submission_id,
+    source_file_url,
+    status,
+    extracted_data,
+    confidence_score,
+    verified_by_user_id,
+    verified_at,
+    error_message,
+    updated_at
+  )
+  values (
+    target_submission.id,
+    target_submission.file_url,
+    next_status,
+    coalesce(next_extracted_data, '{}'::jsonb),
+    next_confidence,
+    case when next_status = 'verified' then auth.uid() else null end,
+    case when next_status = 'verified' then now() else null end,
+    null,
+    now()
+  )
+  on conflict (submission_id) do update
+  set
+    status = excluded.status,
+    extracted_data = excluded.extracted_data,
+    confidence_score = coalesce(excluded.confidence_score, public.dtr_extractions.confidence_score),
+    verified_by_user_id = excluded.verified_by_user_id,
+    verified_at = excluded.verified_at,
+    error_message = null,
+    updated_at = now()
+  returning * into updated_extraction;
+
+  return updated_extraction;
+end;
+$$;
+
+revoke all on function public.review_dtr_extraction(uuid, jsonb, text) from public;
+grant execute on function public.review_dtr_extraction(uuid, jsonb, text) to authenticated, service_role;
+
 create or replace function public.employee_escalate_message_thread(target_thread_id uuid)
 returns public.message_threads
 language plpgsql
@@ -1188,6 +1390,11 @@ begin
       when 'profile_change_requests' then nullif(source_row ->> 'user_id', '')::uuid
       when 'message_threads' then nullif(source_row ->> 'employee_user_id', '')::uuid
       when 'message_messages' then nullif(source_row ->> 'sender_user_id', '')::uuid
+      when 'dtr_extractions' then (
+        select user_id
+        from public.dtr_submissions
+        where id = nullif(source_row ->> 'submission_id', '')::uuid
+      )
       else null
     end;
 
@@ -1239,6 +1446,13 @@ begin
           when TG_OP = 'INSERT' then 'Message sent.'
           when TG_OP = 'UPDATE' and old.body is distinct from new.body then 'Message edited.'
           else 'Message updated.'
+        end
+      when 'dtr_extractions' then
+        case
+          when TG_OP = 'INSERT' then 'DTR payroll extraction started.'
+          when TG_OP = 'UPDATE' and old.status is distinct from new.status then
+            'DTR payroll extraction changed from ' || coalesce(old.status, 'blank') || ' to ' || coalesce(new.status, 'blank') || '.'
+          else 'DTR payroll extraction updated.'
         end
       else TG_TABLE_NAME || ' ' || lower(TG_OP) || '.'
     end;
@@ -1309,6 +1523,11 @@ create trigger audit_message_messages_business_changes
 after insert or update or delete on public.message_messages
 for each row execute function public.write_business_audit_log();
 
+drop trigger if exists audit_dtr_extractions_business_changes on public.dtr_extractions;
+create trigger audit_dtr_extractions_business_changes
+after insert or update or delete on public.dtr_extractions
+for each row execute function public.write_business_audit_log();
+
 drop policy if exists "users_can_select_own_profile" on public.profiles;
 create policy "users_can_select_own_profile"
 on public.profiles for select
@@ -1359,6 +1578,28 @@ drop policy if exists "admins_can_delete_dtr" on public.dtr_submissions;
 create policy "admins_can_delete_dtr"
 on public.dtr_submissions for delete
 using (public.is_admin(auth.uid()));
+
+drop policy if exists "scoped_users_can_select_dtr_extractions" on public.dtr_extractions;
+create policy "scoped_users_can_select_dtr_extractions"
+on public.dtr_extractions for select
+using (
+  exists (
+    select 1
+    from public.dtr_submissions submission
+    where submission.id = public.dtr_extractions.submission_id
+      and (
+        auth.uid() = submission.user_id
+        or public.is_admin(auth.uid())
+        or public.is_supervisor_for_employee(submission.user_id, auth.uid())
+      )
+  )
+);
+
+drop policy if exists "service_role_can_manage_dtr_extractions" on public.dtr_extractions;
+create policy "service_role_can_manage_dtr_extractions"
+on public.dtr_extractions for all
+using (auth.role() = 'service_role')
+with check (auth.role() = 'service_role');
 
 drop policy if exists "users_can_manage_own_documents" on public.employee_documents;
 create policy "users_can_manage_own_documents"
