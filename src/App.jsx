@@ -22,6 +22,7 @@ const SupervisorDtrPage = lazy(() => import("./features/supervisor/SupervisorDtr
 const SupervisorMessagesPage = lazy(() => import("./features/supervisor/SupervisorMessagesPage"));
 const SupervisorTeamPage = lazy(() => import("./features/supervisor/SupervisorTeamPage"));
 const SupervisorSettingsPage = lazy(() => import("./features/supervisor/SupervisorSettingsPage"));
+const WebsiteHelpPage = lazy(() => import("./features/help/WebsiteHelpPage"));
 
 export default function App() {
   const { user, profile, loading, authError, refreshProfile, resetSession } = useAuth();
@@ -71,6 +72,7 @@ export default function App() {
               <Route path="users" element={<AdminUsersPage profile={profile} />} />
               <Route path="messages" element={<AdminMessagesPage profile={profile} />} />
               <Route path="reports" element={<AdminReportsPage profile={profile} />} />
+              <Route path="help" element={<WebsiteHelpPage profile={profile} />} />
               <Route
                 path="settings"
                 element={<AdminSettingsPage profile={profile} refreshProfile={refreshProfile} />}
@@ -86,12 +88,15 @@ export default function App() {
               <Route path="dtr" element={<SupervisorDtrPage profile={profile} />} />
               <Route path="messages" element={<SupervisorMessagesPage profile={profile} />} />
               <Route path="team" element={<SupervisorTeamPage profile={profile} />} />
+              <Route path="help" element={<WebsiteHelpPage profile={profile} />} />
               <Route
                 path="settings"
                 element={<SupervisorSettingsPage profile={profile} refreshProfile={refreshProfile} />}
               />
             </Route>
           </Route>
+
+          <Route path="/help" element={<WebsiteHelpPage profile={profile} />} />
 
           <Route
             path="/"

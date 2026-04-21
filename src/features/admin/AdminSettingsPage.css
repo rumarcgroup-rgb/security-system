@@ -61,9 +61,60 @@
   text-align: left;
 }
 
+.admin-settings-page__health-grid {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-settings-page__health-card {
+  min-height: 5rem;
+}
+
+.admin-settings-page__health-error {
+  margin-top: 1rem;
+}
+
+.admin-settings-page__audit-list {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-settings-page__audit-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-settings-page__managed-list-grid {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-settings-page__managed-list-value {
+  margin-top: 0.35rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #1d4ed8;
+}
+
 @media (min-width: 1280px) {
   .admin-settings-page {
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  }
+}
+
+@media (min-width: 768px) {
+  .admin-settings-page__health-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .admin-settings-page__managed-list-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

@@ -1,6 +1,7 @@
 import {
   Camera,
   ExternalLink,
+  CircleHelp,
   ImageUp,
   LogOut,
   PencilLine,
@@ -9,6 +10,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import Button from "../../../components/ui/Button";
 import Input from "../../../components/ui/Input";
 import Modal from "../../../components/ui/Modal";
@@ -37,8 +39,10 @@ export default function EmployeeDashboardModals({
   notifications,
   notificationsOpen,
   openEditProfileModal,
+  onReviewProfileSetup,
   person,
   profileChangeRequest,
+  profileCompletenessSummary,
   profileRequestLoading,
   profileRow,
   refreshing,
@@ -58,6 +62,16 @@ export default function EmployeeDashboardModals({
   uploadingRequirement,
   uploadRequirement,
 }) {
+  const remainingSetupCount = Math.max(
+    0,
+    (profileCompletenessSummary?.totalCount || 0) - (profileCompletenessSummary?.completeCount || 0)
+  );
+  const profileSetupPercent = profileCompletenessSummary?.percent ?? 0;
+  const profileSetupCopy =
+    remainingSetupCount === 0
+      ? "All setup areas complete"
+      : `${remainingSetupCount} item${remainingSetupCount === 1 ? "" : "s"} left`;
+
   return (
     <>
       <Modal open={Boolean(activeDocument)} onClose={closeActiveDocument} title={activeDocument?.document_type || "Document Preview"}>
@@ -182,16 +196,26 @@ export default function EmployeeDashboardModals({
         ) : null}
       </Modal>
 
-      <Modal open={moreOpen} onClose={() => setMoreOpen(false)} showCloseButton={false}>
-        <div className="app-modal-stack">
+      <Modal
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        showCloseButton={false}
+        variant="bottomSheet"
+        panelClassName="employee-dashboard__more-sheet"
+      >
+        <div className="app-modal-stack employee-dashboard__more-stack">
+          <div className="employee-dashboard__more-handle" />
           <div className="employee-dashboard__modal-header">
-            <p className="app-text-strong-md">More Actions</p>
+            <div>
+              <p className="app-text-strong-md">More Actions</p>
+              <p className="employee-dashboard__copy-xs">Profile, help, refresh, and account options.</p>
+            </div>
             <button type="button" aria-label="Close message" className="app-icon-close" onClick={() => setMoreOpen(false)}>
               <X size={18} />
             </button>
           </div>
 
-          <div className="employee-dashboard__identity-card" style={{ "--employee-card-image": `url(${employeeCardBackground})` }}>
+          <div className="employee-dashboard__identity-card employee-dashboard__identity-card--compact" style={{ "--employee-card-image": `url(${employeeCardBackground})` }}>
             <div className="employee-dashboard__identity-overlay" />
             <div className="employee-dashboard__identity-bubble-left" />
             <div className="employee-dashboard__identity-bubble-right" />
@@ -243,46 +267,73 @@ export default function EmployeeDashboardModals({
             </div>
           </div>
 
-          <div className="employee-card-panel employee-card-panel--elevated employee-dashboard__status-card">
-            <div className="employee-dashboard__section-head">
+          <div className="employee-card-panel employee-card-panel--elevated employee-dashboard__setup-compact">
+            <div className="employee-dashboard__setup-compact-head">
               <div>
-                <p className="employee-dashboard__subsection-title">Profile Edit Request</p>
-                <p className="app-copy-sm">Name and profile picture changes must be approved by admin before they go live.</p>
+                <p className="employee-dashboard__setup-title">Profile setup</p>
+                <p className="employee-dashboard__copy-xs">{profileSetupCopy}</p>
               </div>
-              {profileRequestLoading ? null : profileChangeRequest ? <StatusBadge status={profileChangeRequest.status} /> : null}
+              <span className="app-pill app-pill--success">{profileSetupPercent}%</span>
             </div>
-            <div className="app-actions-wrap app-actions-wrap--spaced">
-              <Button variant="secondary" className="employee-button-secondary" onClick={openEditProfileModal}>
+            <div className="employee-dashboard__setup-progress-track">
+              <div className="employee-dashboard__setup-progress-fill" style={{ width: `${profileSetupPercent}%` }} />
+            </div>
+            <Button variant="secondary" className="employee-button-secondary employee-dashboard__more-action-button" onClick={onReviewProfileSetup}>
+              Review setup
+            </Button>
+          </div>
+
+          <div className="employee-dashboard__more-group">
+            <p className="employee-dashboard__more-group-title">Profile</p>
+            <div className="employee-card-panel employee-card-panel--elevated employee-dashboard__status-card employee-dashboard__status-card--compact">
+              <div className="employee-dashboard__section-head employee-dashboard__section-head--compact">
+                <div>
+                  <p className="employee-dashboard__subsection-title">Profile Edit Request</p>
+                  <p className="app-copy-sm">Admin approval is required before profile changes go live.</p>
+                </div>
+                {profileRequestLoading ? null : profileChangeRequest ? <StatusBadge status={profileChangeRequest.status} /> : null}
+              </div>
+              <Button variant="secondary" className="employee-button-secondary employee-dashboard__more-action-button" onClick={openEditProfileModal}>
                 <PencilLine size={16} />
                 {profileChangeRequest?.status === "Pending Review" ? "Update Pending Request" : "Edit Profile"}
               </Button>
+              {profileRequestLoading ? (
+                <p className="app-copy-sm">Loading request status...</p>
+              ) : profileChangeRequest ? (
+                <div className="app-info-panel employee-dashboard__request-summary employee-dashboard__request-summary--compact">
+                  <p className="app-text-strong-dark">{getStatusCopy(profileChangeRequest.status)}</p>
+                  <p className="mt-2">Requested name: {profileChangeRequest.requested_full_name || person.full_name}</p>
+                  <p className="app-summary-line">
+                    <span className="app-summary-label">Submitted:</span> {new Date(profileChangeRequest.created_at).toLocaleString()}
+                  </p>
+                </div>
+              ) : (
+                <div className="app-empty-box app-empty-box--spaced employee-dashboard__request-empty employee-dashboard__request-empty--compact">
+                  No profile edit request submitted yet.
+                </div>
+              )}
             </div>
-            {profileRequestLoading ? (
-              <p className="app-copy-sm">Loading request status...</p>
-            ) : profileChangeRequest ? (
-              <div className="app-info-panel employee-dashboard__request-summary">
-                <p className="app-text-strong-dark">{getStatusCopy(profileChangeRequest.status)}</p>
-                <p className="mt-2">Requested name: {profileChangeRequest.requested_full_name || person.full_name}</p>
-                <p className="app-summary-line">
-                  <span className="app-summary-label">Birthday / Gender:</span>{" "}
-                  Birthday: {profileChangeRequest.requested_birthday || profileRow?.birthday || "Not set"} | Gender:{" "}
-                  {profileChangeRequest.requested_gender || profileRow?.gender || "Not set"}
-                </p>
-                <p className="app-summary-line">
-                  <span className="app-summary-label">Submitted:</span> {new Date(profileChangeRequest.created_at).toLocaleString()}
-                </p>
-              </div>
-            ) : (
-              <div className="app-empty-box app-empty-box--spaced employee-dashboard__request-empty">No profile edit request submitted yet.</div>
-            )}
           </div>
 
-          <div className="grid gap-2">
-            <Button variant="secondary" className="employee-button-full-secondary" loading={refreshing} onClick={refreshDashboard}>
+          <div className="employee-dashboard__more-group">
+            <p className="employee-dashboard__more-group-title">Help</p>
+            <Link className="employee-dashboard__help-link" to="/help" onClick={() => setMoreOpen(false)}>
+              <CircleHelp size={16} />
+              Open Help Guide
+            </Link>
+          </div>
+
+          <div className="employee-dashboard__more-group">
+            <p className="employee-dashboard__more-group-title">System</p>
+            <Button variant="secondary" className="employee-button-full-secondary employee-dashboard__more-action-button" loading={refreshing} onClick={refreshDashboard}>
               <RefreshCw size={16} />
               Refresh Dashboard
             </Button>
-            <Button variant="danger" className="employee-button-full-danger" loading={loggingOut} onClick={handleLogout}>
+          </div>
+
+          <div className="employee-dashboard__more-group">
+            <p className="employee-dashboard__more-group-title">Account</p>
+            <Button variant="danger" className="employee-button-full-danger employee-dashboard__more-action-button" loading={loggingOut} onClick={handleLogout}>
               <LogOut size={16} />
               Sign Out
             </Button>

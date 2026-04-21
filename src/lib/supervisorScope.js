@@ -8,6 +8,9 @@ export function matchesSupervisorScope(target, supervisorProfile) {
 
   const location = target?.location ?? target?.profiles?.location ?? null;
   const branch = target?.branch ?? target?.profiles?.branch ?? null;
+  const supervisorUserId = target?.supervisor_user_id ?? target?.profiles?.supervisor_user_id ?? null;
+
+  if (supervisorProfile.id && supervisorUserId === supervisorProfile.id) return true;
 
   if (location !== supervisorProfile.location) return false;
   if (supervisorProfile.branch && branch !== supervisorProfile.branch) return false;

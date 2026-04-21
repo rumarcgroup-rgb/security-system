@@ -1,4 +1,4 @@
-import { FileClock, LayoutDashboard, LogOut, MessageSquareText, Settings, Users, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { CircleHelp, FileClock, LayoutDashboard, LogOut, MessageSquareText, Settings, Users, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
@@ -10,6 +10,7 @@ const items = [
   { to: "/supervisor/dtr", label: "Team DTR", icon: FileClock },
   { to: "/supervisor/messages", label: "Messages", icon: MessageSquareText },
   { to: "/supervisor/team", label: "Team", icon: Users },
+  { to: "/supervisor/help", label: "Help", icon: CircleHelp },
   { to: "/supervisor/settings", label: "Settings", icon: Settings },
 ];
 

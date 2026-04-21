@@ -8,6 +8,7 @@ const DTR_SELECT = `
   id,
   user_id,
   cutoff,
+  selected_dtr_date,
   employee_note,
   admin_remarks,
   file_url,
@@ -16,7 +17,7 @@ const DTR_SELECT = `
   created_at,
   submitted_by_role,
   submitted_by_user_id,
-  profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name, role, employee_id, location, branch)
+  profiles:profiles!dtr_submissions_user_id_profile_fkey(full_name, role, employee_id, location, branch, supervisor_user_id)
 `;
 
 function sortDtrRows(rows = []) {

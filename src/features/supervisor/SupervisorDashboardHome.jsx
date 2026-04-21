@@ -90,6 +90,47 @@ export default function SupervisorDashboardHome({ profile }) {
       .slice(0, 6);
   }, [teamProfiles]);
 
+  const latestCutoff = useMemo(() => {
+    return dtrRows[0]?.cutoff || "";
+  }, [dtrRows]);
+
+  const latestDtrByUserId = useMemo(() => {
+    const map = new Map();
+    dtrRows.forEach((row) => {
+      if (!row.user_id) return;
+      const current = map.get(row.user_id);
+      if (!current || new Date(row.created_at || 0) > new Date(current.created_at || 0)) {
+        map.set(row.user_id, row);
+      }
+    });
+    return map;
+  }, [dtrRows]);
+
+  const attendanceBoard = useMemo(() => {
+    return teamProfiles
+      .map((member) => ({
+        member,
+        latestDtr: latestDtrByUserId.get(member.id) || null,
+      }))
+      .sort((left, right) => {
+        const statusRank = { "Pending Review": 0, Rejected: 1, Approved: 2 };
+        const leftRank = left.latestDtr ? statusRank[left.latestDtr.status] ?? 3 : -1;
+        const rightRank = right.latestDtr ? statusRank[right.latestDtr.status] ?? 3 : -1;
+        if (leftRank !== rightRank) return leftRank - rightRank;
+        return (left.member.full_name || "").localeCompare(right.member.full_name || "");
+      })
+      .slice(0, 8);
+  }, [latestDtrByUserId, teamProfiles]);
+
+  const missingDtrTeam = useMemo(() => {
+    if (!latestCutoff) return [];
+
+    return teamProfiles
+      .filter((member) => !dtrRows.some((row) => row.user_id === member.id && row.cutoff === latestCutoff))
+      .sort((left, right) => (left.full_name || "").localeCompare(right.full_name || ""))
+      .slice(0, 8);
+  }, [dtrRows, latestCutoff, teamProfiles]);
+
   if (!profile?.location) {
     return <p className="admin-empty-copy">This supervisor account needs an assigned area before the dashboard can load team data.</p>;
   }
@@ -171,6 +212,63 @@ export default function SupervisorDashboardHome({ profile }) {
               ))}
             </div>
           )}
+        </Card>
+
+        <Card>
+          <div className="admin-section-head">
+            <div>
+              <h2 className="admin-section-title admin-dashboard-home__section-title">Team Attendance Board</h2>
+              <p className="admin-section-copy">
+                Latest DTR status for your guards{latestCutoff ? `, using ${latestCutoff} as the active cutoff.` : "."}
+              </p>
+            </div>
+            <Link className="admin-link" to="/supervisor/dtr">
+              Open Team DTR
+            </Link>
+          </div>
+          <div className="supervisor-dashboard-home__attendance-list">
+            {attendanceBoard.map(({ member, latestDtr }) => (
+              <div key={member.id} className="admin-list-card supervisor-dashboard-home__attendance-item">
+                <div>
+                  <p className="admin-dashboard-home__activity-name">{member.full_name || "Unnamed Guard"}</p>
+                  <p className="app-copy-sm">{member.employee_id || "No employee ID"} | {member.branch || member.location || "No assignment"}</p>
+                  <p className="app-copy-xs-muted">
+                    {latestDtr ? `${latestDtr.cutoff || "No cutoff"} submitted ${new Date(latestDtr.created_at).toLocaleString()}` : "No DTR submitted yet"}
+                  </p>
+                </div>
+                {latestDtr ? <StatusBadge status={latestDtr.status} /> : <span className="app-pill app-pill--danger">Missing</span>}
+              </div>
+            ))}
+            {attendanceBoard.length === 0 ? <p className="admin-empty-copy">No guards are currently assigned under this supervisor scope.</p> : null}
+          </div>
+        </Card>
+
+        <Card>
+          <div className="admin-section-head">
+            <div>
+              <h2 className="admin-section-title admin-dashboard-home__section-title">Missing DTR Follow-Up</h2>
+              <p className="admin-section-copy">
+                {latestCutoff ? `Guards without a DTR for ${latestCutoff}.` : "A cutoff appears here after the first team DTR is submitted."}
+              </p>
+            </div>
+            <Link className="admin-link" to="/supervisor/dtr">
+              Submit Team DTR
+            </Link>
+          </div>
+          <div className="supervisor-dashboard-home__team-list">
+            {missingDtrTeam.map((item) => (
+              <div key={item.id} className="admin-list-card supervisor-dashboard-home__team-item">
+                <div className="supervisor-dashboard-home__team-main">
+                  <p className="admin-dashboard-home__activity-name">{item.full_name || "Unnamed Guard"}</p>
+                  <p className="app-copy-sm">{item.employee_id || "No employee ID assigned"}</p>
+                  <p className="app-copy-xs-muted">{item.branch || item.location || "No branch assigned"} | {item.shift || "Shift not set"}</p>
+                </div>
+                <span className="app-pill app-pill--warning">Follow up</span>
+              </div>
+            ))}
+            {!latestCutoff ? <p className="admin-empty-copy">No active cutoff has DTR activity yet.</p> : null}
+            {latestCutoff && missingDtrTeam.length === 0 ? <p className="admin-empty-copy">No missing DTRs for this cutoff.</p> : null}
+          </div>
         </Card>
 
         <Card>

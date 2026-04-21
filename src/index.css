@@ -383,6 +383,12 @@
     color: #b45309;
   }
 
+  .app-pill--danger {
+    background: #fff1f2;
+    color: #be123c;
+    box-shadow: inset 0 0 0 1px #fecdd3;
+  }
+
   .app-pill-dot {
     height: 0.5rem;
     width: 0.5rem;

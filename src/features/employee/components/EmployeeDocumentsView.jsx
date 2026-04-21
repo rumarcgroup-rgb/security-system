@@ -16,6 +16,10 @@ export default function EmployeeDocumentsView({
         <p className="app-copy-sm">Review uploaded requirements, preview files, and update anything that still needs attention.</p>
       </div>
 
+      <div className="app-info-panel">
+        What happens next: uploaded files stay Pending Review until admin marks them Verified or Needs Reupload. If a file needs reupload, open it here and send a replacement.
+      </div>
+
       <EmployeeActionItemsSection
         actions={actions}
         emptyCopy={dashboardVariant.actionEmptyCopy}

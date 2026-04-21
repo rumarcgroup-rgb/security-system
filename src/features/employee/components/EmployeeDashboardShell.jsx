@@ -12,6 +12,7 @@ export default function EmployeeDashboardShell({
   children,
   dashboardVariant,
   unreadMessagesCount,
+  moreNeedsAttention = false,
   onOpenMessages,
   onOpenMore,
   onOpenNotifications,
@@ -51,14 +52,14 @@ export default function EmployeeDashboardShell({
         </button>
         <div className="employee-dashboard__nav-side employee-dashboard__nav-side--right">
           <Nav icon={MessageSquareText} isActive={activeView === "messages"} label="Messages" badgeCount={unreadMessagesCount} onClick={onOpenMessages} />
-          <Nav icon={MoreHorizontal} label="More" onClick={onOpenMore} />
+          <Nav icon={MoreHorizontal} label="More" attention={moreNeedsAttention} onClick={onOpenMore} />
         </div>
       </nav>
     </>
   );
 }
 
-function Nav({ icon: Icon, isActive = false, badgeCount = 0, label, onClick }) {
+function Nav({ icon: Icon, isActive = false, attention = false, badgeCount = 0, label, onClick }) {
   return (
     <button
       type="button"
@@ -68,6 +69,7 @@ function Nav({ icon: Icon, isActive = false, badgeCount = 0, label, onClick }) {
       <Icon size={17} />
       <span className="employee-dashboard__nav-label">{label}</span>
       {badgeCount > 0 ? <span className="employee-dashboard__nav-badge">{Math.min(badgeCount, 9)}</span> : null}
+      {attention && badgeCount === 0 ? <span className="employee-dashboard__nav-attention-dot" /> : null}
     </button>
   );
 }

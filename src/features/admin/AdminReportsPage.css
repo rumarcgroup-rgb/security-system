@@ -11,6 +11,10 @@
   color: #1e293b;
 }
 
+.admin-reports-page__summary-copy {
+  margin-bottom: 1rem;
+}
+
 .admin-reports-page__bar--approved {
   background: #10b981;
 }

@@ -142,7 +142,19 @@
   gap: 0.75rem;
 }
 
+.supervisor-dashboard-home__attendance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .supervisor-dashboard-home__team-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.supervisor-dashboard-home__attendance-item {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -250,7 +262,8 @@
   }
 
   .admin-dashboard-home__activity-item,
-  .supervisor-dashboard-home__team-item {
+  .supervisor-dashboard-home__team-item,
+  .supervisor-dashboard-home__attendance-item {
     align-items: flex-start;
   }
 
@@ -265,7 +278,8 @@
   }
 
   .admin-dashboard-home__activity-item,
-  .supervisor-dashboard-home__team-item {
+  .supervisor-dashboard-home__team-item,
+  .supervisor-dashboard-home__attendance-item {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;

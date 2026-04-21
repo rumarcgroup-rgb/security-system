@@ -107,6 +107,19 @@ create table if not exists public.message_read_states (
   primary key (thread_id, user_id)
 );
 
+create table if not exists public.audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  actor_user_id uuid references public.profiles(id) on delete set null,
+  event_type text not null,
+  table_name text not null,
+  record_id uuid,
+  target_user_id uuid references public.profiles(id) on delete set null,
+  summary text not null,
+  old_data jsonb,
+  new_data jsonb,
+  created_at timestamptz default now()
+);
+
 alter table public.profiles
   add column if not exists signature_status text not null default 'Pending Review';
 
@@ -359,6 +372,9 @@ create unique index if not exists idx_message_threads_open_route_unique
 create index if not exists idx_message_messages_thread_id on public.message_messages(thread_id, created_at);
 create index if not exists idx_message_messages_sender_user_id on public.message_messages(sender_user_id);
 create index if not exists idx_message_read_states_user_id on public.message_read_states(user_id);
+create index if not exists idx_audit_logs_created_at on public.audit_logs(created_at desc);
+create index if not exists idx_audit_logs_table_name on public.audit_logs(table_name);
+create index if not exists idx_audit_logs_target_user_id on public.audit_logs(target_user_id);
 
 alter table public.profiles enable row level security;
 alter table public.dtr_submissions enable row level security;
@@ -368,6 +384,7 @@ alter table public.profile_change_requests enable row level security;
 alter table public.message_threads enable row level security;
 alter table public.message_messages enable row level security;
 alter table public.message_read_states enable row level security;
+alter table public.audit_logs enable row level security;
 
 do $$
 begin
@@ -455,6 +472,16 @@ begin
     ) then
       alter publication supabase_realtime add table public.message_read_states;
     end if;
+
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = 'audit_logs'
+    ) then
+      alter publication supabase_realtime add table public.audit_logs;
+    end if;
   end if;
 end
 $$;
@@ -486,6 +513,84 @@ $$;
 
 revoke all on function public.is_admin(uuid) from public;
 grant execute on function public.is_admin(uuid) to authenticated, service_role;
+
+create or replace function public.get_admin_system_health()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  required_realtime_tables text[] := array[
+    'dtr_submissions',
+    'employee_documents',
+    'profile_change_requests',
+    'profiles',
+    'employee_presence',
+    'message_threads',
+    'message_messages',
+    'message_read_states',
+    'audit_logs'
+  ];
+  realtime_enabled boolean;
+  realtime_tables jsonb;
+begin
+  if not public.is_admin(auth.uid()) then
+    raise exception 'Admin access required.';
+  end if;
+
+  select exists (
+    select 1
+    from pg_publication
+    where pubname = 'supabase_realtime'
+  )
+  into realtime_enabled;
+
+  select coalesce(jsonb_agg(tablename order by tablename), '[]'::jsonb)
+  into realtime_tables
+  from pg_publication_tables
+  where pubname = 'supabase_realtime'
+    and schemaname = 'public'
+    and tablename = any(required_realtime_tables);
+
+  return jsonb_build_object(
+    'checked_at', now(),
+    'profile_id', auth.uid(),
+    'profile_role', 'admin',
+    'realtime_publication_exists', realtime_enabled,
+    'required_realtime_tables', to_jsonb(required_realtime_tables),
+    'enabled_realtime_tables', realtime_tables,
+    'missing_realtime_tables',
+      (
+        select coalesce(jsonb_agg(required_table), '[]'::jsonb)
+        from unnest(required_realtime_tables) as required_table
+        where not exists (
+          select 1
+          from pg_publication_tables
+          where pubname = 'supabase_realtime'
+            and schemaname = 'public'
+            and tablename = required_table
+        )
+      )
+  );
+exception
+  when others then
+    return jsonb_build_object(
+      'checked_at', now(),
+      'profile_id', auth.uid(),
+      'profile_role', 'admin',
+      'realtime_publication_exists', false,
+      'required_realtime_tables', to_jsonb(required_realtime_tables),
+      'enabled_realtime_tables', '[]'::jsonb,
+      'missing_realtime_tables', to_jsonb(required_realtime_tables),
+      'error', sqlerrm
+    );
+end;
+$$;
+
+revoke all on function public.get_admin_system_health() from public;
+grant execute on function public.get_admin_system_health() to authenticated, service_role;
 
 create or replace function public.is_supervisor(check_user_id uuid default auth.uid())
 returns boolean
@@ -564,6 +669,57 @@ $$;
 
 revoke all on function public.is_supervisor_for_scope(text, text, uuid) from public;
 grant execute on function public.is_supervisor_for_scope(text, text, uuid) to authenticated, service_role;
+
+create or replace function public.is_supervisor_for_employee(
+  target_user_id uuid,
+  check_user_id uuid default auth.uid()
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  target_location text;
+  target_branch text;
+  target_role text;
+  target_supervisor_user_id uuid;
+begin
+  if target_user_id is null or check_user_id is null then
+    return false;
+  end if;
+
+  select
+    location,
+    branch,
+    role,
+    supervisor_user_id
+  into
+    target_location,
+    target_branch,
+    target_role,
+    target_supervisor_user_id
+  from public.profiles
+  where id = target_user_id;
+
+  if not found or target_role = 'admin' then
+    return false;
+  end if;
+
+  if target_supervisor_user_id = check_user_id and public.is_supervisor(check_user_id) then
+    return true;
+  end if;
+
+  return public.is_supervisor_for_scope(target_location, target_branch, check_user_id);
+exception
+  when others then
+    return false;
+end;
+$$;
+
+revoke all on function public.is_supervisor_for_employee(uuid, uuid) from public;
+grant execute on function public.is_supervisor_for_employee(uuid, uuid) to authenticated, service_role;
 
 create or replace function public.can_access_message_thread(
   target_thread_id uuid,
@@ -812,6 +968,76 @@ $$;
 revoke all on function public.edit_message(uuid, text) from public;
 grant execute on function public.edit_message(uuid, text) to authenticated, service_role;
 
+create or replace function public.employee_reupload_dtr_submission(
+  target_submission_id uuid,
+  next_file_url text,
+  next_employee_note text default null
+)
+returns public.dtr_submissions
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  updated_submission public.dtr_submissions;
+  trimmed_file_url text;
+  trimmed_note text;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required.';
+  end if;
+
+  trimmed_file_url := btrim(coalesce(next_file_url, ''));
+  trimmed_note := nullif(btrim(coalesce(next_employee_note, '')), '');
+
+  if trimmed_file_url = '' then
+    raise exception 'Replacement DTR file is required.';
+  end if;
+
+  if left(trimmed_file_url, char_length(auth.uid()::text) + 1) <> auth.uid()::text || '/' then
+    raise exception 'Replacement DTR file must be uploaded under your own folder.';
+  end if;
+
+  select *
+  into updated_submission
+  from public.dtr_submissions
+  where id = target_submission_id;
+
+  if not found then
+    raise exception 'DTR submission not found.';
+  end if;
+
+  if updated_submission.user_id <> auth.uid() then
+    raise exception 'You can only reupload your own DTR.';
+  end if;
+
+  if updated_submission.submitted_by_role <> 'employee'
+    or coalesce(updated_submission.submitted_by_user_id, updated_submission.user_id) <> auth.uid()
+  then
+    raise exception 'Only guard-submitted DTRs can be reuploaded by the guard.';
+  end if;
+
+  if updated_submission.status not in ('Pending Review', 'Rejected') then
+    raise exception 'Only pending or rejected DTRs can be reuploaded.';
+  end if;
+
+  update public.dtr_submissions
+  set
+    file_url = trimmed_file_url,
+    employee_note = trimmed_note,
+    admin_remarks = null,
+    status = 'Pending Review',
+    approved_at = null
+  where id = target_submission_id
+  returning * into updated_submission;
+
+  return updated_submission;
+end;
+$$;
+
+revoke all on function public.employee_reupload_dtr_submission(uuid, text, text) from public;
+grant execute on function public.employee_reupload_dtr_submission(uuid, text, text) to authenticated, service_role;
+
 create or replace function public.employee_escalate_message_thread(target_thread_id uuid)
 returns public.message_threads
 language plpgsql
@@ -928,13 +1154,168 @@ $$;
 revoke all on function public.resolve_message_thread(uuid) from public;
 grant execute on function public.resolve_message_thread(uuid) to authenticated, service_role;
 
+create or replace function public.write_business_audit_log()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  source_row jsonb;
+  previous_row jsonb;
+  next_row jsonb;
+  audit_record_id uuid;
+  audit_target_user_id uuid;
+  audit_summary text;
+begin
+  if TG_OP = 'DELETE' then
+    source_row := to_jsonb(old);
+    previous_row := to_jsonb(old);
+    next_row := null;
+  else
+    source_row := to_jsonb(new);
+    previous_row := case when TG_OP = 'UPDATE' then to_jsonb(old) else null end;
+    next_row := to_jsonb(new);
+  end if;
+
+  audit_record_id := nullif(source_row ->> 'id', '')::uuid;
+
+  audit_target_user_id :=
+    case TG_TABLE_NAME
+      when 'profiles' then nullif(source_row ->> 'id', '')::uuid
+      when 'dtr_submissions' then nullif(source_row ->> 'user_id', '')::uuid
+      when 'employee_documents' then nullif(source_row ->> 'user_id', '')::uuid
+      when 'profile_change_requests' then nullif(source_row ->> 'user_id', '')::uuid
+      when 'message_threads' then nullif(source_row ->> 'employee_user_id', '')::uuid
+      when 'message_messages' then nullif(source_row ->> 'sender_user_id', '')::uuid
+      else null
+    end;
+
+  audit_summary :=
+    case TG_TABLE_NAME
+      when 'dtr_submissions' then
+        case
+          when TG_OP = 'INSERT' then 'DTR submission created.'
+          when TG_OP = 'UPDATE' and old.status is distinct from new.status then
+            'DTR status changed from ' || coalesce(old.status, 'blank') || ' to ' || coalesce(new.status, 'blank') || '.'
+          else 'DTR submission updated.'
+        end
+      when 'employee_documents' then
+        case
+          when TG_OP = 'INSERT' then 'Requirement uploaded.'
+          when TG_OP = 'UPDATE' and old.review_status is distinct from new.review_status then
+            'Requirement status changed from ' || coalesce(old.review_status, 'blank') || ' to ' || coalesce(new.review_status, 'blank') || '.'
+          else 'Requirement updated.'
+        end
+      when 'profile_change_requests' then
+        case
+          when TG_OP = 'INSERT' then 'Profile change request created.'
+          when TG_OP = 'UPDATE' and old.status is distinct from new.status then
+            'Profile change request changed from ' || coalesce(old.status, 'blank') || ' to ' || coalesce(new.status, 'blank') || '.'
+          else 'Profile change request updated.'
+        end
+      when 'profiles' then
+        case
+          when TG_OP = 'INSERT' then 'Profile created.'
+          when TG_OP = 'UPDATE' and (
+            old.role is distinct from new.role
+            or old.location is distinct from new.location
+            or old.branch is distinct from new.branch
+            or old.supervisor_user_id is distinct from new.supervisor_user_id
+            or old.position is distinct from new.position
+          ) then 'Role or assignment updated.'
+          else 'Profile updated.'
+        end
+      when 'message_threads' then
+        case
+          when TG_OP = 'INSERT' then 'Message thread created.'
+          when TG_OP = 'UPDATE' and old.escalated_to_admin = false and new.escalated_to_admin = true then 'Message thread escalated to admin.'
+          when TG_OP = 'UPDATE' and old.escalated_to_admin = true and new.escalated_to_admin = false then 'Message thread admin escalation turned off.'
+          when TG_OP = 'UPDATE' and old.status is distinct from new.status then 'Message thread status changed.'
+          else 'Message thread updated.'
+        end
+      when 'message_messages' then
+        case
+          when TG_OP = 'INSERT' then 'Message sent.'
+          when TG_OP = 'UPDATE' and old.body is distinct from new.body then 'Message edited.'
+          else 'Message updated.'
+        end
+      else TG_TABLE_NAME || ' ' || lower(TG_OP) || '.'
+    end;
+
+  insert into public.audit_logs (
+    actor_user_id,
+    event_type,
+    table_name,
+    record_id,
+    target_user_id,
+    summary,
+    old_data,
+    new_data
+  )
+  values (
+    auth.uid(),
+    lower(TG_OP),
+    TG_TABLE_NAME,
+    audit_record_id,
+    audit_target_user_id,
+    audit_summary,
+    previous_row,
+    next_row
+  );
+
+  if TG_OP = 'DELETE' then
+    return old;
+  end if;
+
+  return new;
+exception
+  when others then
+    if TG_OP = 'DELETE' then
+      return old;
+    end if;
+
+    return new;
+end;
+$$;
+
+drop trigger if exists audit_profiles_business_changes on public.profiles;
+create trigger audit_profiles_business_changes
+after insert or update on public.profiles
+for each row execute function public.write_business_audit_log();
+
+drop trigger if exists audit_dtr_submissions_business_changes on public.dtr_submissions;
+create trigger audit_dtr_submissions_business_changes
+after insert or update or delete on public.dtr_submissions
+for each row execute function public.write_business_audit_log();
+
+drop trigger if exists audit_employee_documents_business_changes on public.employee_documents;
+create trigger audit_employee_documents_business_changes
+after insert or update or delete on public.employee_documents
+for each row execute function public.write_business_audit_log();
+
+drop trigger if exists audit_profile_change_requests_business_changes on public.profile_change_requests;
+create trigger audit_profile_change_requests_business_changes
+after insert or update or delete on public.profile_change_requests
+for each row execute function public.write_business_audit_log();
+
+drop trigger if exists audit_message_threads_business_changes on public.message_threads;
+create trigger audit_message_threads_business_changes
+after insert or update or delete on public.message_threads
+for each row execute function public.write_business_audit_log();
+
+drop trigger if exists audit_message_messages_business_changes on public.message_messages;
+create trigger audit_message_messages_business_changes
+after insert or update or delete on public.message_messages
+for each row execute function public.write_business_audit_log();
+
 drop policy if exists "users_can_select_own_profile" on public.profiles;
 create policy "users_can_select_own_profile"
 on public.profiles for select
 using (
   auth.uid() = id
   or public.is_admin(auth.uid())
-  or public.is_supervisor_for_scope(location, branch, auth.uid())
+  or public.is_supervisor_for_employee(id, auth.uid())
 );
 
 drop policy if exists "users_can_upsert_own_profile" on public.profiles;
@@ -944,26 +1325,40 @@ using (auth.uid() = id or public.is_admin(auth.uid()))
 with check (auth.uid() = id or public.is_admin(auth.uid()));
 
 drop policy if exists "users_can_manage_own_dtr" on public.dtr_submissions;
-create policy "users_can_manage_own_dtr"
-on public.dtr_submissions for all
+drop policy if exists "users_can_select_scoped_dtr" on public.dtr_submissions;
+create policy "users_can_select_scoped_dtr"
+on public.dtr_submissions for select
 using (
   auth.uid() = user_id
   or public.is_admin(auth.uid())
-  or public.is_supervisor_for_scope(
-    (select location from public.profiles where id = user_id),
-    (select branch from public.profiles where id = user_id),
-    auth.uid()
-  )
-)
+  or public.is_supervisor_for_employee(user_id, auth.uid())
+);
+
+drop policy if exists "users_can_insert_scoped_dtr" on public.dtr_submissions;
+create policy "users_can_insert_scoped_dtr"
+on public.dtr_submissions for insert
 with check (
   auth.uid() = user_id
   or public.is_admin(auth.uid())
-  or public.is_supervisor_for_scope(
-    (select location from public.profiles where id = user_id),
-    (select branch from public.profiles where id = user_id),
-    auth.uid()
-  )
+  or public.is_supervisor_for_employee(user_id, auth.uid())
 );
+
+drop policy if exists "admins_and_supervisors_can_update_dtr" on public.dtr_submissions;
+create policy "admins_and_supervisors_can_update_dtr"
+on public.dtr_submissions for update
+using (
+  public.is_admin(auth.uid())
+  or public.is_supervisor_for_employee(user_id, auth.uid())
+)
+with check (
+  public.is_admin(auth.uid())
+  or public.is_supervisor_for_employee(user_id, auth.uid())
+);
+
+drop policy if exists "admins_can_delete_dtr" on public.dtr_submissions;
+create policy "admins_can_delete_dtr"
+on public.dtr_submissions for delete
+using (public.is_admin(auth.uid()));
 
 drop policy if exists "users_can_manage_own_documents" on public.employee_documents;
 create policy "users_can_manage_own_documents"
@@ -971,20 +1366,12 @@ on public.employee_documents for all
 using (
   auth.uid() = user_id
   or public.is_admin(auth.uid())
-  or public.is_supervisor_for_scope(
-    (select location from public.profiles where id = user_id),
-    (select branch from public.profiles where id = user_id),
-    auth.uid()
-  )
+  or public.is_supervisor_for_employee(user_id, auth.uid())
 )
 with check (
   auth.uid() = user_id
   or public.is_admin(auth.uid())
-  or public.is_supervisor_for_scope(
-    (select location from public.profiles where id = user_id),
-    (select branch from public.profiles where id = user_id),
-    auth.uid()
-  )
+  or public.is_supervisor_for_employee(user_id, auth.uid())
 );
 
 drop policy if exists "users_can_manage_own_presence" on public.employee_presence;
@@ -993,20 +1380,12 @@ on public.employee_presence for all
 using (
   auth.uid() = user_id
   or public.is_admin(auth.uid())
-  or public.is_supervisor_for_scope(
-    (select location from public.profiles where id = user_id),
-    (select branch from public.profiles where id = user_id),
-    auth.uid()
-  )
+  or public.is_supervisor_for_employee(user_id, auth.uid())
 )
 with check (
   auth.uid() = user_id
   or public.is_admin(auth.uid())
-  or public.is_supervisor_for_scope(
-    (select location from public.profiles where id = user_id),
-    (select branch from public.profiles where id = user_id),
-    auth.uid()
-  )
+  or public.is_supervisor_for_employee(user_id, auth.uid())
 );
 
 drop policy if exists "users_can_manage_own_profile_change_requests" on public.profile_change_requests;
@@ -1079,6 +1458,17 @@ with check (
   and public.can_access_message_thread(thread_id, auth.uid())
 );
 
+drop policy if exists "admins_can_select_audit_logs" on public.audit_logs;
+create policy "admins_can_select_audit_logs"
+on public.audit_logs for select
+using (public.is_admin(auth.uid()));
+
+drop policy if exists "service_role_can_manage_audit_logs" on public.audit_logs;
+create policy "service_role_can_manage_audit_logs"
+on public.audit_logs for all
+using (auth.role() = 'service_role')
+with check (auth.role() = 'service_role');
+
 -- --------------------------------------
 -- Storage Buckets + Strict Access Policies
 -- --------------------------------------
@@ -1113,7 +1503,7 @@ using (
       select 1
       from public.profiles
       where id::text = (storage.foldername(name))[1]
-        and public.is_supervisor_for_scope(location, branch, auth.uid())
+        and public.is_supervisor_for_employee(id, auth.uid())
     )
   )
 );
@@ -1130,7 +1520,7 @@ with check (
       select 1
       from public.profiles
       where id::text = (storage.foldername(name))[1]
-        and public.is_supervisor_for_scope(location, branch, auth.uid())
+        and public.is_supervisor_for_employee(id, auth.uid())
     )
   )
 );
@@ -1177,7 +1567,7 @@ using (
       select 1
       from public.profiles
       where id::text = (storage.foldername(name))[1]
-        and public.is_supervisor_for_scope(location, branch, auth.uid())
+        and public.is_supervisor_for_employee(id, auth.uid())
     )
   )
 );

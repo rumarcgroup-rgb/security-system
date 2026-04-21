@@ -6,6 +6,7 @@ import EmployeeMessagesView from "./components/EmployeeMessagesView";
 import EmployeeDashboardModals from "./components/EmployeeDashboardModals";
 import EmployeeDashboardShell from "./components/EmployeeDashboardShell";
 import EmployeeSubmitDtrView from "./components/EmployeeSubmitDtrView";
+import EmployeeDtrReviewModal from "./components/EmployeeDtrReviewModal";
 import { useEmployeeDashboard } from "./useEmployeeDashboard";
 
 export default function EmployeeDashboard({ user, profile, refreshProfile }) {
@@ -29,6 +30,26 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
 
   function handleOpenMessagesView() {
     setActiveView("messages");
+  }
+
+  function handleReviewProfileSetup() {
+    const incompleteSetupItems = dashboard.profileCompletenessSummary.checks.filter((item) => !item.done);
+    const needsDocumentReview = incompleteSetupItems.some((item) => item.id === "documents" || item.id === "signature");
+    const canRequestProfileEdit = incompleteSetupItems.some((item) => item.id === "personal" || item.id === "government");
+
+    dashboard.setMoreOpen(false);
+
+    if (needsDocumentReview) {
+      setActiveView("documents");
+      return;
+    }
+
+    if (canRequestProfileEdit) {
+      dashboard.openEditProfileModal();
+      return;
+    }
+
+    setActiveView("dashboard");
   }
 
   function handleStatusMessageAction(message) {
@@ -68,6 +89,10 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
       <EmployeeDashboardShell
         activeView={activeView}
         dashboardVariant={dashboard.dashboardVariant}
+        moreNeedsAttention={
+          dashboard.profileCompletenessSummary.percent < 100 ||
+          dashboard.profileChangeRequest?.status === "Rejected"
+        }
         unreadMessagesCount={dashboard.unreadMessagesCount}
         onOpenMessages={handleOpenMessagesView}
         onOpenMore={() => dashboard.setMoreOpen(true)}
@@ -126,7 +151,10 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
             assignment={dashboard.assignment}
             dashboardVariant={dashboard.dashboardVariant}
             person={dashboard.person}
+            profileCompletenessSummary={dashboard.profileCompletenessSummary}
             submissions={dashboard.submissions}
+            dtrReviewLoadingId={dashboard.dtrReviewLoadingId}
+            onOpenDtrReview={dashboard.openDtrReview}
             recentSubmissionsFocusRequestKey={recentSubmissionsFocusRequestKey}
             summary={dashboard.summary}
           />
@@ -155,10 +183,12 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         openEditProfileModal={dashboard.openEditProfileModal}
         person={dashboard.person}
         profileChangeRequest={dashboard.profileChangeRequest}
+        profileCompletenessSummary={dashboard.profileCompletenessSummary}
         profileRequestLoading={dashboard.profileRequestLoading}
         profileRow={dashboard.profileRow}
         refreshing={dashboard.refreshing}
         refreshDashboard={dashboard.refreshDashboard}
+        onReviewProfileSetup={handleReviewProfileSetup}
         replacementFile={dashboard.replacementFile}
         setEditProfileForm={dashboard.setEditProfileForm}
         setEditProfileImageFile={dashboard.setEditProfileImageFile}
@@ -173,6 +203,18 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
         summary={dashboard.summary}
         uploadingRequirement={dashboard.uploadingRequirement}
         uploadRequirement={dashboard.uploadRequirement}
+      />
+
+      <EmployeeDtrReviewModal
+        currentUserId={user.id}
+        file={dashboard.dtrReuploadFile}
+        note={dashboard.dtrReuploadNote}
+        onChangeFile={dashboard.setDtrReuploadFile}
+        onChangeNote={dashboard.setDtrReuploadNote}
+        onClose={dashboard.closeDtrReview}
+        onSubmitReplacement={dashboard.reuploadDtrSubmission}
+        reuploading={dashboard.reuploadingDtr}
+        submission={dashboard.activeDtrReview}
       />
     </div>
   );

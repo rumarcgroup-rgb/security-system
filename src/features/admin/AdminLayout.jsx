@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, LayoutDashboard, FileClock, Files, Users, FileBarChart2, Settings, LogOut, MessageSquareText, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Bell, CircleHelp, LayoutDashboard, FileClock, Files, Users, FileBarChart2, Settings, LogOut, MessageSquareText, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Link, NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 import Modal from "../../components/ui/Modal";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -17,6 +17,7 @@ const items = [
   { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/messages", label: "Messages", icon: MessageSquareText },
   { to: "/admin/reports", label: "Reports", icon: FileBarChart2 },
+  { to: "/admin/help", label: "Help", icon: CircleHelp },
   { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

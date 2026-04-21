@@ -6,6 +6,7 @@ import { clearStoredEmployeePortalType } from "../../lib/employeePortal";
 import {
   CIVIL_STATUS_OPTIONS,
   GENDER_OPTIONS,
+  IMAGE_TYPES,
   REQUIRED_DOCUMENTS,
   getDashboardVariant,
 } from "./employeeDashboardConfig";
@@ -28,6 +29,11 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
   const [file, setFile] = useState(null);
   const [employeeNote, setEmployeeNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [activeDtrReview, setActiveDtrReview] = useState(null);
+  const [dtrReviewLoadingId, setDtrReviewLoadingId] = useState(null);
+  const [dtrReuploadFile, setDtrReuploadFile] = useState(null);
+  const [dtrReuploadNote, setDtrReuploadNote] = useState("");
+  const [reuploadingDtr, setReuploadingDtr] = useState(false);
   const [activeDocument, setActiveDocument] = useState(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [seenNotificationIds, setSeenNotificationIds] = useState([]);
@@ -151,6 +157,96 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
       return documents.find((item) => item.id === current.id) || null;
     });
   }, [documents]);
+
+  useEffect(() => {
+    setActiveDtrReview((current) => {
+      if (!current?.id) return current;
+      const nextSubmission = submissions.find((item) => item.id === current.id);
+      return nextSubmission || current;
+    });
+  }, [submissions]);
+
+  async function openDtrReview(submission) {
+    if (!submission?.id) return;
+
+    setDtrReviewLoadingId(submission.id);
+    setDtrReuploadFile(null);
+
+    try {
+      const refreshedSubmission = await dtrStore.syncRowById(submission.id);
+      const nextSubmission = refreshedSubmission || submission;
+      setActiveDtrReview(nextSubmission);
+      setDtrReuploadNote(nextSubmission.employee_note || "");
+    } catch (err) {
+      toast.error(err.message || "Unable to load DTR review.");
+      setActiveDtrReview(submission);
+      setDtrReuploadNote(submission.employee_note || "");
+    } finally {
+      setDtrReviewLoadingId(null);
+    }
+  }
+
+  function closeDtrReview() {
+    setActiveDtrReview(null);
+    setDtrReuploadFile(null);
+    setDtrReuploadNote("");
+  }
+
+  async function reuploadDtrSubmission() {
+    if (!activeDtrReview?.id) return;
+
+    if (!dtrReuploadFile) {
+      toast.error("Please choose a replacement DTR image.");
+      return;
+    }
+
+    if (dtrReuploadFile.type && !IMAGE_TYPES.includes(dtrReuploadFile.type)) {
+      toast.error("DTR replacement must be PNG, JPG, or WEBP.");
+      return;
+    }
+
+    setReuploadingDtr(true);
+    let path = "";
+
+    try {
+      const ext = dtrReuploadFile.name.split(".").pop()?.toLowerCase() || "jpg";
+      path = `${user.id}/dtr-reupload-${Date.now()}.${ext}`;
+      const upload = await supabase.storage.from("dtr-images").upload(path, dtrReuploadFile, {
+        cacheControl: "3600",
+        contentType: dtrReuploadFile.type || undefined,
+        upsert: false,
+      });
+      if (upload.error) throw upload.error;
+
+      const { error: rpcError } = await supabase.rpc("employee_reupload_dtr_submission", {
+        target_submission_id: activeDtrReview.id,
+        next_file_url: path,
+        next_employee_note: dtrReuploadNote.trim() || null,
+      });
+
+      if (rpcError) {
+        await supabase.storage.from("dtr-images").remove([path]);
+        throw rpcError;
+      }
+
+      const refreshedSubmission = await dtrStore.syncRowById(activeDtrReview.id);
+      setActiveDtrReview(refreshedSubmission || {
+        ...activeDtrReview,
+        file_url: path,
+        preview_url: "",
+        employee_note: dtrReuploadNote.trim() || null,
+        admin_remarks: null,
+        status: "Pending Review",
+        approved_at: null,
+      });
+      setDtrReuploadFile(null);
+      toast.success("DTR replacement submitted for review.");
+    } catch (err) {
+      toast.error(err.message || "Unable to reupload DTR.");
+    } finally {
+      setReuploadingDtr(false);
+    }
+  }
 
   async function submitDtr() {
     if (!file) return toast.error("Please upload a DTR image.");
@@ -455,12 +551,14 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
   const summary = useMemo(() => {
     const pendingDtrs = submissions.filter((item) => item.status === "Pending Review").length;
     const approvedDtrs = submissions.filter((item) => item.status === "Approved").length;
+    const rejectedDtrs = submissions.filter((item) => item.status === "Rejected").length;
     const verifiedDocs = documents.filter((item) => item.review_status === "Verified").length;
     const flaggedDocs = documents.filter(
       (item) => item.review_status === "Needs Reupload" || item.review_status === "Missing"
     ).length;
+    const needsActionTotal = rejectedDtrs + flaggedDocs;
 
-    return { pendingDtrs, approvedDtrs, verifiedDocs, flaggedDocs };
+    return { pendingDtrs, approvedDtrs, rejectedDtrs, verifiedDocs, flaggedDocs, needsActionTotal };
   }, [documents, submissions]);
 
   const complianceSummary = useMemo(() => {
@@ -486,6 +584,47 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
       totalRequired,
     };
   }, [documents]);
+
+  const profileCompletenessSummary = useMemo(() => {
+    const hasAnySupervisor = Boolean(profileRow?.supervisor_user_id || profileRow?.supervisor);
+    const signatureDocument = documents.find((item) => item.document_type === "Signature");
+    const checks = [
+      {
+        id: "personal",
+        label: "Personal info",
+        done: Boolean(profileRow?.full_name && profileRow?.birthday && profileRow?.gender && profileRow?.civil_status),
+      },
+      {
+        id: "government",
+        label: "Government IDs",
+        done: Boolean(profileRow?.sss && profileRow?.philhealth && profileRow?.pagibig && profileRow?.tin),
+      },
+      {
+        id: "employment",
+        label: "Employment details",
+        done: Boolean(profileRow?.employee_id && profileRow?.location && profileRow?.position && profileRow?.shift && hasAnySupervisor),
+      },
+      {
+        id: "documents",
+        label: "Required documents",
+        done: complianceSummary.completedCount === complianceSummary.totalRequired && complianceSummary.totalRequired > 0,
+      },
+      {
+        id: "signature",
+        label: "Verified signature",
+        done: signatureDocument?.review_status === "Verified" || signatureDocument?.review_status === "Approved",
+      },
+    ];
+    const completeCount = checks.filter((item) => item.done).length;
+    const percent = checks.length ? Math.round((completeCount / checks.length) * 100) : 0;
+
+    return {
+      checks,
+      completeCount,
+      percent,
+      totalCount: checks.length,
+    };
+  }, [complianceSummary.completedCount, complianceSummary.totalRequired, documents, profileRow]);
 
   const adminFeedback = useMemo(() => {
     return submissions
@@ -785,6 +924,7 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
     GENDER_OPTIONS,
     activeCutoffIndex,
     activeDocument,
+    activeDtrReview,
     activeProfileRequestAvatar,
     clearSignaturePad,
     closeActiveDocument,
@@ -800,10 +940,14 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
     assignment,
     adminFeedback,
     complianceSummary,
+    profileCompletenessSummary,
     drawSignatureStroke,
     editProfileForm,
     editProfileImageFile,
     editProfileOpen,
+    dtrReviewLoadingId,
+    dtrReuploadFile,
+    dtrReuploadNote,
     employeeNote,
     endSignatureStroke,
     file,
@@ -820,7 +964,9 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
     moreOpen,
     notifications,
     notificationsOpen,
+    closeDtrReview,
     openEditProfileModal,
+    openDtrReview,
     person,
     profileChangeRequest,
     profileRequestLoading,
@@ -828,6 +974,7 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
     refreshing,
     refreshDashboard,
     replacementFile,
+    reuploadingDtr,
     setActiveCutoffIndex,
     setActiveDocument,
     setCutoff,
@@ -838,6 +985,8 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
     setEditProfileOpen,
     setEmployeeNote,
     setFile,
+    setDtrReuploadFile,
+    setDtrReuploadNote,
     setMoreOpen,
     setNotificationsOpen,
     setReplacementFile,
@@ -845,6 +994,7 @@ export function useEmployeeDashboard({ user, profile, refreshProfile }) {
     startSignatureStroke,
     submitDtr,
     submitting,
+    reuploadDtrSubmission,
     submittingProfileRequest,
     submitProfileChangeRequest,
     submissions,

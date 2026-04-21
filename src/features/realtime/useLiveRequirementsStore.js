@@ -11,7 +11,7 @@ const DOCUMENT_SELECT = `
   file_url,
   review_status,
   created_at,
-  profiles:profiles!employee_documents_user_id_profile_fkey(id, full_name, employee_id, location, branch)
+  profiles:profiles!employee_documents_user_id_profile_fkey(id, full_name, employee_id, location, branch, supervisor_user_id)
 `;
 
 const PROFILE_SIGNATURE_SELECT = `
@@ -20,6 +20,7 @@ const PROFILE_SIGNATURE_SELECT = `
   employee_id,
   location,
   branch,
+  supervisor_user_id,
   signature_url,
   signature_status,
   created_at
@@ -77,6 +78,7 @@ function normalizeSignatureRow(profile) {
       employee_id: profile.employee_id,
       location: profile.location,
       branch: profile.branch,
+      supervisor_user_id: profile.supervisor_user_id,
     },
   };
 }

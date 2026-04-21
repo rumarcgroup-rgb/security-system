@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import Card from "../../components/ui/Card";
+import Button from "../../components/ui/Button";
 import { sortAreas } from "../../lib/areas";
 import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
 import "./AdminReportsPage.css";
@@ -10,6 +11,11 @@ const statusColors = {
   "Pending Review": "pending",
   Rejected: "rejected",
 };
+
+function csvValue(value) {
+  const text = value == null ? "" : String(value);
+  return `"${text.replaceAll('"', '""')}"`;
+}
 
 export default function AdminReportsPage({ profile }) {
   const { rows, loading } = useLiveDtrStore({
@@ -66,12 +72,95 @@ export default function AdminReportsPage({ profile }) {
 
   const maxDaily = Math.max(...dailyTrend.map((point) => point.value), 1);
 
+  const cutoffSummary = useMemo(() => {
+    const grouped = rows.reduce((acc, row) => {
+      const key = row.cutoff || "No cutoff";
+      if (!acc[key]) {
+        acc[key] = {
+          cutoff: key,
+          total: 0,
+          approved: 0,
+          pending: 0,
+          rejected: 0,
+          locations: new Set(),
+          latestApprovedAt: "",
+        };
+      }
+
+      acc[key].total += 1;
+      if (row.status === "Approved") acc[key].approved += 1;
+      if (row.status === "Pending Review") acc[key].pending += 1;
+      if (row.status === "Rejected") acc[key].rejected += 1;
+      if (row.profiles?.location) acc[key].locations.add(row.profiles.location);
+      if (row.approved_at && (!acc[key].latestApprovedAt || new Date(row.approved_at) > new Date(acc[key].latestApprovedAt))) {
+        acc[key].latestApprovedAt = row.approved_at;
+      }
+
+      return acc;
+    }, {});
+
+    return Object.values(grouped)
+      .map((item) => ({
+        ...item,
+        locations: Array.from(item.locations).sort().join(", ") || "Unassigned",
+      }))
+      .sort((left, right) => new Date(right.latestApprovedAt || 0) - new Date(left.latestApprovedAt || 0) || right.total - left.total)
+      .slice(0, 10);
+  }, [rows]);
+
+  function exportDtrCsv() {
+    const headers = [
+      "Guard",
+      "Employee ID",
+      "Location",
+      "Branch",
+      "Cutoff",
+      "Status",
+      "Submitted At",
+      "Approved At",
+      "Submitted By",
+      "Admin Remarks",
+    ];
+    const csvRows = rows.map((row) => [
+      row.profiles?.full_name,
+      row.profiles?.employee_id,
+      row.profiles?.location,
+      row.profiles?.branch,
+      row.cutoff,
+      row.status,
+      row.created_at,
+      row.approved_at,
+      row.submitted_by_role || "employee",
+      row.admin_remarks,
+    ]);
+    const csv = [headers, ...csvRows].map((line) => line.map(csvValue).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `dtr-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (loading) {
     return <p className="admin-loading-copy">Loading report analytics...</p>;
   }
 
   return (
     <div className="admin-page admin-reports-page">
+      <Card>
+        <div className="admin-section-head">
+          <div>
+            <h2 className="admin-section-title admin-reports-page__section-title">Report Exports</h2>
+            <p className="admin-section-copy">Download the live DTR dataset for payroll review, audit checks, or spreadsheet cleanup.</p>
+          </div>
+          <Button onClick={exportDtrCsv} disabled={rows.length === 0}>
+            Export DTR CSV
+          </Button>
+        </div>
+      </Card>
+
       <div className="admin-metrics-grid admin-metrics-grid--reports">
         <MetricCard label="Total Submissions" value={metrics.total} />
         <MetricCard label="Approved" value={metrics.approved} tone="emerald" />
@@ -154,6 +243,44 @@ export default function AdminReportsPage({ profile }) {
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card>
+        <h3 className="admin-section-title admin-reports-page__section-title">Payroll-Ready Cutoff Summary</h3>
+        <p className="admin-section-copy admin-reports-page__summary-copy">
+          Use this as a quick pre-payroll check before exporting the full CSV.
+        </p>
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr className="admin-table-head-row admin-table-head-row--sm">
+                <th className="admin-table-head-cell">Cutoff</th>
+                <th className="admin-table-head-cell">Locations</th>
+                <th className="admin-table-head-cell">Total</th>
+                <th className="admin-table-head-cell">Approved</th>
+                <th className="admin-table-head-cell">Pending</th>
+                <th className="admin-table-head-cell">Rejected</th>
+                <th className="admin-table-head-cell">Latest Approval</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cutoffSummary.map((item) => (
+                <tr key={item.cutoff} className="admin-table-row">
+                  <td className="admin-table-cell">{item.cutoff}</td>
+                  <td className="admin-table-cell">{item.locations}</td>
+                  <td className="admin-table-cell">{item.total}</td>
+                  <td className="admin-table-cell">{item.approved}</td>
+                  <td className="admin-table-cell">{item.pending}</td>
+                  <td className="admin-table-cell">{item.rejected}</td>
+                  <td className="admin-table-cell">
+                    {item.latestApprovedAt ? new Date(item.latestApprovedAt).toLocaleString() : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {cutoffSummary.length === 0 ? <p className="admin-empty-copy admin-reports-page__empty">No cutoff summary available yet.</p> : null}
       </Card>
     </div>
   );

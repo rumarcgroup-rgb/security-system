@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { IdCard, MapPin } from "lucide-react";
 import Card from "../../../components/ui/Card";
@@ -9,13 +9,26 @@ export default function EmployeeDashboardMain({
   adminFeedback,
   assignment,
   dashboardVariant,
+  dtrReviewLoadingId,
   person,
+  profileCompletenessSummary,
+  onOpenDtrReview,
   recentSubmissionsFocusRequestKey,
   submissions,
   summary,
 }) {
   const recentSubmissionsRef = useRef(null);
   const sectionHighlightTimeoutRef = useRef(null);
+  const dtrHistory = useMemo(() => {
+    return [...submissions]
+      .sort((left, right) => new Date(right.selected_dtr_date || right.created_at || 0) - new Date(left.selected_dtr_date || left.created_at || 0))
+      .slice(0, 10);
+  }, [submissions]);
+  const needsActionTotal = summary.needsActionTotal ?? summary.rejectedDtrs + summary.flaggedDocs;
+  const hasRejectedDtrAction = summary.rejectedDtrs > 0;
+  const hasFileAction = summary.flaggedDocs > 0;
+  const hasNeedsAction = needsActionTotal > 0;
+  const isProfileComplete = profileCompletenessSummary.percent >= 100;
 
   useEffect(() => {
     return () => {
@@ -126,7 +139,6 @@ export default function EmployeeDashboardMain({
           </div>
         </Card>
 
-
       </div>
 
       <div className="employee-dashboard__stats-grid">
@@ -147,10 +159,60 @@ export default function EmployeeDashboardMain({
         </Card>
         <Card className="employee-dashboard__stat-card--alert">
           <p className="employee-dashboard__stat-label employee-dashboard__stat-label--alert">Needs Action</p>
-          <p className="employee-dashboard__stat-value employee-dashboard__stat-value--alert">{summary.flaggedDocs}</p>
-          <p className="employee-dashboard__stat-copy employee-dashboard__stat-copy--alert">Missing or for reupload</p>
+          <p className="employee-dashboard__stat-value employee-dashboard__stat-value--alert">{needsActionTotal}</p>
+          <p className="employee-dashboard__stat-copy employee-dashboard__stat-copy--alert">Rejected DTR or files to fix</p>
+          <div className="employee-dashboard__stat-breakdown">
+            <span>Rejected DTR: {summary.rejectedDtrs}</span>
+            <span>Files to fix: {summary.flaggedDocs}</span>
+          </div>
         </Card>
       </div>
+
+      {hasNeedsAction ? (
+        <Card className="employee-dashboard__next-action-card">
+          <h3 className="employee-dashboard__subsection-title employee-dashboard__subsection-title--tight">Needs Action Guidance</h3>
+          <div className="employee-dashboard__guidance-list">
+            {hasRejectedDtrAction ? (
+              <p className="app-copy-sm">Review the admin remarks on your rejected DTR, then submit a corrected DTR for review.</p>
+            ) : null}
+            {hasFileAction ? (
+              <p className="app-copy-sm">Open Documents and upload replacements for missing files or files marked Needs Reupload.</p>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
+
+      {!isProfileComplete ? (
+        <Card className="employee-dashboard__compliance-card">
+          <div className="employee-dashboard__section-head">
+            <div>
+              <h3 className="employee-dashboard__subsection-title">Profile Completeness</h3>
+              <p className="app-copy-sm">Finish these items so admin and supervisors can process your records smoothly.</p>
+            </div>
+            <span className="app-pill app-pill--success">{profileCompletenessSummary.percent}%</span>
+          </div>
+          <div className="employee-dashboard__compliance-progress">
+            <div className="employee-dashboard__progress-track">
+              <div className="employee-dashboard__progress-fill" style={{ width: `${profileCompletenessSummary.percent}%` }} />
+            </div>
+            <p className="employee-dashboard__copy-xs">
+              {profileCompletenessSummary.completeCount} of {profileCompletenessSummary.totalCount} setup areas complete.
+            </p>
+          </div>
+          <div className="employee-dashboard__compliance-checks">
+            {profileCompletenessSummary.checks.map((item) => (
+              <div
+                key={item.id}
+                className={`employee-dashboard__compliance-check${item.done ? " employee-dashboard__compliance-check--done" : ""}`}
+              >
+                <span className="employee-dashboard__compliance-dot" />
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
       <div>
         <h3 className="employee-dashboard__subsection-title employee-dashboard__subsection-title--tight">Recent Admin Feedback</h3>
         <div className="employee-stack employee-dashboard__recent-list">
@@ -190,9 +252,54 @@ export default function EmployeeDashboardMain({
                 </div>
                 <StatusBadge status={row.status} />
               </div>
+              <div className="employee-dashboard__recent-actions">
+                <button
+                  type="button"
+                  className="app-link-button employee-dashboard__review-dtr-button"
+                  disabled={dtrReviewLoadingId === row.id}
+                  onClick={() => onOpenDtrReview(row)}
+                >
+                  {dtrReviewLoadingId === row.id ? "Loading DTR..." : "Review DTR"}
+                </button>
+              </div>
             </motion.div>
           ))}
           {submissions.length === 0 ? <p className="app-copy-sm">No submissions yet.</p> : null}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="employee-dashboard__subsection-title employee-dashboard__subsection-title--tight">DTR History Timeline</h3>
+        <div className="employee-dashboard__timeline">
+          {dtrHistory.map((row) => (
+            <div key={`timeline-${row.id}`} className="employee-dashboard__timeline-item">
+              <span className="employee-dashboard__timeline-dot" />
+              <div className="employee-dashboard__timeline-card">
+                <div className="employee-dashboard__recent-item-header">
+                  <div>
+                    <p className="employee-dashboard__text-strong">{row.cutoff || "No cutoff selected"}</p>
+                    <p className="employee-dashboard__copy-xs">
+                      Submitted {new Date(row.created_at).toLocaleString()}
+                      {row.selected_dtr_date ? ` | DTR date ${row.selected_dtr_date}` : ""}
+                    </p>
+                  </div>
+                  <StatusBadge status={row.status} />
+                </div>
+                {row.admin_remarks ? <p className="app-copy-xs-spaced-brand">Admin remarks: {row.admin_remarks}</p> : null}
+                <div className="employee-dashboard__recent-actions employee-dashboard__recent-actions--timeline">
+                  <button
+                    type="button"
+                    className="app-link-button employee-dashboard__review-dtr-button"
+                    disabled={dtrReviewLoadingId === row.id}
+                    onClick={() => onOpenDtrReview(row)}
+                  >
+                    {dtrReviewLoadingId === row.id ? "Loading DTR..." : "Review DTR"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {dtrHistory.length === 0 ? <p className="app-copy-sm">Your submitted DTR history will appear here.</p> : null}
         </div>
       </div>
 

@@ -30,6 +30,10 @@ export default function EmployeeSubmitDtrView({
         <p className="app-copy-sm">Choose your cutoff, attach the final DTR image, and send it for admin review.</p>
       </div>
 
+      <div className="app-info-panel">
+        What happens next: your DTR appears instantly in the admin and supervisor queues. You will see Pending Review until it is approved or returned with remarks.
+      </div>
+
       <EmployeePortalHighlightsSection dashboardVariant={dashboardVariant} />
 
       <EmployeeSubmitDtrSection
