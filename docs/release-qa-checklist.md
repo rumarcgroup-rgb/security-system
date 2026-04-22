@@ -29,7 +29,7 @@ Use this checklist before deploying changes to the guard, supervisor, and admin 
 4. Open Requirements, verify one document, mark another Needs Reupload, and test bulk actions.
 5. Open Users, approve/reject a profile request, change an employee assignment, and update a role.
 6. Open Messages and confirm admin fallback/escalated threads are visible only when expected.
-7. Open Reports, confirm charts load, export DTR CSV, and review Payroll-Ready Cutoff Summary.
+7. Open Reports, confirm charts load, export DTR CSV, and review Cutoff Summary.
 8. Open Settings, run System Health, confirm Audit Log Preview loads, and toggle Realtime Alerts sound.
 
 ## Realtime Recovery

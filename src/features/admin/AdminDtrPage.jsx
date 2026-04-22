@@ -7,15 +7,8 @@ import Select from "../../components/ui/Select";
 import Button from "../../components/ui/Button";
 import StatusBadge from "../../components/ui/StatusBadge";
 import Modal from "../../components/ui/Modal";
-import DtrExtractionPanel from "../dtr/DtrExtractionPanel";
 import { getBranchesForArea, sortBranches } from "../../lib/branches";
 import { sortAreas } from "../../lib/areas";
-import {
-  getDtrExtractionStatusLabel,
-  getPrimaryDtrExtraction,
-  saveDtrExtractionReview,
-  triggerDtrExtraction,
-} from "../../lib/dtrExtraction";
 import { supabase } from "../../lib/supabase";
 import { mergeCutoffOptions } from "../../lib/dtr";
 import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
@@ -40,10 +33,8 @@ export default function AdminDtrPage({ profile }) {
   const [adminRemarks, setAdminRemarks] = useState("");
   const [bulkRemarks, setBulkRemarks] = useState("");
   const [saving, setSaving] = useState(false);
-  const [savingExtraction, setSavingExtraction] = useState(false);
-  const [extractingId, setExtractingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
-  const { rows, loading, patchRowsByIds, syncNow, syncRowById } = useLiveDtrStore({
+  const { rows, patchRowsByIds, syncNow } = useLiveDtrStore({
     currentRole: "admin",
     currentUserId: profile?.id,
     scopeProfile: profile,
@@ -277,42 +268,6 @@ export default function AdminDtrPage({ profile }) {
     toast.success(`${item.profiles?.full_name || "Submission"} marked as ${status}`);
     if (reviewItem?.id === item.id) {
       closeReview();
-    }
-  }
-
-  async function runExtraction(item) {
-    if (!item?.id) return;
-    setExtractingId(item.id);
-    try {
-      const result = await triggerDtrExtraction(item.id);
-      await syncRowById(item.id);
-      if (result?.status === "failed") {
-        toast.error(result.error || "DTR extraction failed.");
-      } else {
-        toast.success("AI payroll draft generated.");
-      }
-    } catch (error) {
-      toast.error(error.message || "Unable to run DTR extraction.");
-    } finally {
-      setExtractingId(null);
-    }
-  }
-
-  async function saveExtraction(item, extractedData, status) {
-    if (!item?.id) return;
-    setSavingExtraction(true);
-    try {
-      await saveDtrExtractionReview({
-        submissionId: item.id,
-        extractedData,
-        status,
-      });
-      await syncRowById(item.id);
-      toast.success(status === "verified" ? "Payroll data verified." : "Payroll draft saved.");
-    } catch (error) {
-      toast.error(error.message || "Unable to save payroll draft.");
-    } finally {
-      setSavingExtraction(false);
     }
   }
 
@@ -559,7 +514,6 @@ export default function AdminDtrPage({ profile }) {
                     <th className="admin-table-head-cell">Date Submitted</th>
                     <th className="admin-table-head-cell">Date Approved</th>
                     <th className="admin-table-head-cell">Status</th>
-                    <th className="admin-table-head-cell">Payroll Draft</th>
                     <th className="admin-table-head-cell">Action</th>
                   </tr>
                 </thead>
@@ -617,9 +571,6 @@ export default function AdminDtrPage({ profile }) {
                           {staleLabel ? (
                             <p className={staleLabel.className}>{staleLabel.label}</p>
                           ) : null}
-                        </td>
-                        <td className="admin-table-cell">
-                          <StatusBadge status={getDtrExtractionStatusLabel(getPrimaryDtrExtraction(item)?.status)} />
                         </td>
                         <td className="admin-table-cell">
                           <div className="admin-dtr-page__row-actions">
@@ -714,43 +665,31 @@ export default function AdminDtrPage({ profile }) {
                 {reviewItem.admin_remarks?.trim() || "No remarks yet"}
               </p>
             </div>
-            <div className="admin-dtr-page__review-workspace">
-              <div>
-                {reviewItem.preview_url ? (
-                  <a
-                    href={reviewItem.preview_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="app-preview-image-link app-preview-overlay-link"
-                    title="Open submitted image"
-                  >
-                    <div className="app-preview-frame-wrap">
-                      <img
-                        src={reviewItem.preview_url}
-                        alt="DTR full preview"
-                        className="app-preview-image admin-dtr-page__modal-preview-image"
-                      />
-                      <div className="app-preview-chip">
-                        <ExternalLink size={14} />
-                        View Full Image
-                      </div>
-                    </div>
-                  </a>
-                ) : (
-                  <div className="app-empty-box">
-                    Unable to load preview URL.
+            {reviewItem.preview_url ? (
+              <a
+                href={reviewItem.preview_url}
+                target="_blank"
+                rel="noreferrer"
+                className="app-preview-image-link app-preview-overlay-link"
+                title="Open submitted image"
+              >
+                <div className="app-preview-frame-wrap">
+                  <img
+                    src={reviewItem.preview_url}
+                    alt="DTR full preview"
+                    className="app-preview-image admin-dtr-page__modal-preview-image"
+                  />
+                  <div className="app-preview-chip">
+                    <ExternalLink size={14} />
+                    View Full Image
                   </div>
-                )}
+                </div>
+              </a>
+            ) : (
+              <div className="app-empty-box">
+                Unable to load preview URL.
               </div>
-              <DtrExtractionPanel
-                canReview
-                extracting={extractingId === reviewItem.id}
-                onSaveExtraction={saveExtraction}
-                onStartExtraction={runExtraction}
-                saving={savingExtraction}
-                submission={reviewItem}
-              />
-            </div>
+            )}
             <label className="app-field-block admin-dtr-page__remarks">
               <span className="app-field-label">Admin Remarks</span>
               <textarea

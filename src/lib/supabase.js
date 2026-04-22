@@ -9,4 +9,15 @@ if (!isSupabaseConfigured) {
   console.warn("Supabase environment variables are missing.");
 }
 
-export const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
+async function runWithoutBrowserLock(_name, _acquireTimeout, fn) {
+  return fn();
+}
+
+export const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        lock: runWithoutBrowserLock,
+        lockAcquireTimeout: 3000,
+      },
+    })
+  : null;

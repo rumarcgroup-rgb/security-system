@@ -6,13 +6,6 @@ import Card from "../../components/ui/Card";
 import Modal from "../../components/ui/Modal";
 import Select from "../../components/ui/Select";
 import StatusBadge from "../../components/ui/StatusBadge";
-import DtrExtractionPanel from "../dtr/DtrExtractionPanel";
-import {
-  getDtrExtractionStatusLabel,
-  getPrimaryDtrExtraction,
-  saveDtrExtractionReview,
-  triggerDtrExtraction,
-} from "../../lib/dtrExtraction";
 import { buildCutoffOptions, mergeCutoffOptions } from "../../lib/dtr";
 import { getSupervisorScopeLabel } from "../../lib/supervisorScope";
 import { supabase } from "../../lib/supabase";
@@ -38,8 +31,6 @@ export default function SupervisorDtrPage({ profile }) {
   const [reviewItem, setReviewItem] = useState(null);
   const [adminRemarks, setAdminRemarks] = useState("");
   const [saving, setSaving] = useState(false);
-  const [savingExtraction, setSavingExtraction] = useState(false);
-  const [extractingId, setExtractingId] = useState(null);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmingSubmit, setConfirmingSubmit] = useState(false);
@@ -202,42 +193,6 @@ export default function SupervisorDtrPage({ profile }) {
     closeReview();
   }
 
-  async function runExtraction(item) {
-    if (!item?.id) return;
-    setExtractingId(item.id);
-    try {
-      const result = await triggerDtrExtraction(item.id);
-      await syncRowById(item.id);
-      if (result?.status === "failed") {
-        toast.error(result.error || "DTR extraction failed.");
-      } else {
-        toast.success("AI payroll draft generated.");
-      }
-    } catch (error) {
-      toast.error(error.message || "Unable to run DTR extraction.");
-    } finally {
-      setExtractingId(null);
-    }
-  }
-
-  async function saveExtraction(item, extractedData, status) {
-    if (!item?.id) return;
-    setSavingExtraction(true);
-    try {
-      await saveDtrExtractionReview({
-        submissionId: item.id,
-        extractedData,
-        status,
-      });
-      await syncRowById(item.id);
-      toast.success(status === "verified" ? "Payroll data verified." : "Payroll draft saved.");
-    } catch (error) {
-      toast.error(error.message || "Unable to save payroll draft.");
-    } finally {
-      setSavingExtraction(false);
-    }
-  }
-
   function closeSubmitModal() {
     setSubmitOpen(false);
     setConfirmingSubmit(false);
@@ -316,16 +271,6 @@ export default function SupervisorDtrPage({ profile }) {
       }
 
       await Promise.all(insertedIds.map((id) => syncRowById(id)));
-      void Promise.allSettled(
-        insertedIds.map((id) =>
-          triggerDtrExtraction(id)
-            .then(() => syncRowById(id))
-            .catch((error) => {
-              console.warn("Team DTR extraction did not complete:", error);
-              return syncRowById(id);
-            })
-        )
-      );
 
       const skippedCount = skipExistingRows ? selectedUserIds.length - targetUserIds.length : 0;
       toast.success(
@@ -459,7 +404,6 @@ export default function SupervisorDtrPage({ profile }) {
                 <th className="admin-table-head-cell">Preview</th>
                 <th className="admin-table-head-cell">Submitted</th>
                 <th className="admin-table-head-cell">Status</th>
-                <th className="admin-table-head-cell">Payroll Draft</th>
                 <th className="admin-table-head-cell">Action</th>
               </tr>
             </thead>
@@ -493,9 +437,6 @@ export default function SupervisorDtrPage({ profile }) {
                     <StatusBadge status={item.status} />
                   </td>
                   <td className="admin-table-cell">
-                    <StatusBadge status={getDtrExtractionStatusLabel(getPrimaryDtrExtraction(item)?.status)} />
-                  </td>
-                  <td className="admin-table-cell">
                     <Button className="app-compact-button" onClick={() => openReview(item)}>
                       {item.status === "Pending Review" ? "Review" : "View"}
                     </Button>
@@ -521,31 +462,19 @@ export default function SupervisorDtrPage({ profile }) {
               </p>
               <p className="app-summary-line"><span className="app-summary-label">Employee Note:</span> {reviewItem.employee_note?.trim() || "No note provided"}</p>
             </div>
-            <div className="supervisor-dtr-page__review-workspace">
-              <div>
-                {reviewItem.preview_url ? (
-                  <a href={reviewItem.preview_url} target="_blank" rel="noreferrer" className="app-preview-image-link app-preview-overlay-link">
-                    <div className="app-preview-frame-wrap">
-                      <img src={reviewItem.preview_url} alt="DTR full preview" className="app-preview-image supervisor-dtr-page__modal-preview" />
-                      <div className="app-preview-chip">
-                        <ExternalLink size={14} />
-                        View Full Image
-                      </div>
-                    </div>
-                  </a>
-                ) : (
-                  <div className="app-empty-box">Unable to load preview URL.</div>
-                )}
-              </div>
-              <DtrExtractionPanel
-                canReview
-                extracting={extractingId === reviewItem.id}
-                onSaveExtraction={saveExtraction}
-                onStartExtraction={runExtraction}
-                saving={savingExtraction}
-                submission={reviewItem}
-              />
-            </div>
+            {reviewItem.preview_url ? (
+              <a href={reviewItem.preview_url} target="_blank" rel="noreferrer" className="app-preview-image-link app-preview-overlay-link">
+                <div className="app-preview-frame-wrap">
+                  <img src={reviewItem.preview_url} alt="DTR full preview" className="app-preview-image supervisor-dtr-page__modal-preview" />
+                  <div className="app-preview-chip">
+                    <ExternalLink size={14} />
+                    View Full Image
+                  </div>
+                </div>
+              </a>
+            ) : (
+              <div className="app-empty-box">Unable to load preview URL.</div>
+            )}
             <label className="app-field-block">
               <span className="app-field-label">Supervisor Remarks</span>
               <textarea

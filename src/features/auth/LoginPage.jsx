@@ -15,6 +15,17 @@ import cgroupHeroLogo from "../../assets/employee-card-bg.jpg";
 import { getPortalConfig, portalConfigs, selectorItems } from "./portalConfig";
 import "./LoginPage.css";
 
+const AUTH_REQUEST_TIMEOUT_MS = 15000;
+
+function withTimeout(promise, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error(`${label} timed out. Please check your connection and try again.`)), AUTH_REQUEST_TIMEOUT_MS);
+    }),
+  ]);
+}
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const { portalType } = useParams();
@@ -38,7 +49,7 @@ export default function LoginPage() {
     async function redirectAuthenticatedUser() {
       if (!isSupabaseConfigured) return;
 
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await withTimeout(supabase.auth.getSession(), "Checking existing session");
       if (!active || error) return;
 
       if (data.session?.user) {
@@ -68,10 +79,14 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const normalizedEmail = email.trim().toLowerCase();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password,
-      });
+      clearStoredSupabaseAuth();
+      const { data, error } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password,
+        }),
+        "Signing in"
+      );
       if (error) throw error;
 
       if (isAdminPortal) {
@@ -80,11 +95,14 @@ export default function LoginPage() {
           throw new Error("Unable to verify admin access.");
         }
 
-        const { data: adminProfile, error: profileError } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", signedInUser.id)
-          .maybeSingle();
+        const { data: adminProfile, error: profileError } = await withTimeout(
+          supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", signedInUser.id)
+            .maybeSingle(),
+          "Checking admin access"
+        );
 
         if (profileError) throw profileError;
 
@@ -105,7 +123,7 @@ export default function LoginPage() {
 
       if (isRetryableSessionError(message)) {
         clearStoredSupabaseAuth();
-        await supabase.auth.signOut().catch(() => { });
+        await withTimeout(supabase.auth.signOut(), "Clearing session").catch(() => { });
       }
 
       setFormError(message);
