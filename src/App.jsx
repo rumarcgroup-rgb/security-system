@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 import { useAuth } from "./hooks/useAuth";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
 import RoleRoute from "./components/layout/RoleRoute";
@@ -44,6 +45,7 @@ export default function App() {
 
   return (
     <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading module...</div>}>
+      <Analytics />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/:portalType" element={<LoginPage />} />
