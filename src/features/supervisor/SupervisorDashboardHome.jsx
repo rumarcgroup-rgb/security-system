@@ -20,8 +20,25 @@ const metricCards = [
   { key: "approvedToday", label: "Approved Today", icon: CheckCircle2, tone: "emerald" },
 ];
 
+const actionFilters = [
+  { value: "all", label: "All Actions" },
+  { value: "direct", label: "My Direct Guards" },
+  { value: "missing", label: "Missing DTR" },
+  { value: "pending", label: "Pending Review" },
+  { value: "follow-up", label: "Needs Follow-up" },
+];
+
+const actionRank = {
+  "follow-up": 0,
+  missing: 1,
+  pending: 2,
+  watch: 3,
+  clear: 4,
+};
+
 export default function SupervisorDashboardHome({ profile }) {
   const [highlightedDtrId, setHighlightedDtrId] = useState(null);
+  const [actionFilter, setActionFilter] = useState("all");
   const { rows: dtrRows, loading: dtrLoading, lastEvent: lastDtrEvent } = useLiveDtrStore({
     currentRole: "supervisor",
     currentUserId: profile?.id,
@@ -106,6 +123,87 @@ export default function SupervisorDashboardHome({ profile }) {
     return map;
   }, [dtrRows]);
 
+  const latestCutoffDtrByUserId = useMemo(() => {
+    const map = new Map();
+    if (!latestCutoff) return map;
+
+    dtrRows.forEach((row) => {
+      if (row.cutoff !== latestCutoff || !row.user_id) return;
+      const current = map.get(row.user_id);
+      if (!current || new Date(row.created_at || 0) > new Date(current.created_at || 0)) {
+        map.set(row.user_id, row);
+      }
+    });
+
+    return map;
+  }, [dtrRows, latestCutoff]);
+
+  const requirementIssueCountByUserId = useMemo(() => {
+    return requirementRows.reduce((map, row) => {
+      if (row.status !== "Needs Reupload") return map;
+      map.set(row.user_id, (map.get(row.user_id) || 0) + 1);
+      return map;
+    }, new Map());
+  }, [requirementRows]);
+
+  const teamActionQueue = useMemo(() => {
+    return teamProfiles
+      .map((member) => {
+        const latestDtr = latestDtrByUserId.get(member.id) || null;
+        const cutoffDtr = latestCutoffDtrByUserId.get(member.id) || null;
+        const issueCount = requirementIssueCountByUserId.get(member.id) || 0;
+        const isDirect = member.supervisor_user_id === profile?.id;
+        const isOnline = isEmployeeOnline(member.last_seen_at);
+        let type = "clear";
+        let label = "Clear";
+        let copy = latestCutoff ? `No action needed for ${latestCutoff}.` : "Waiting for active cutoff activity.";
+
+        if (cutoffDtr?.status === "Rejected" || latestDtr?.status === "Rejected") {
+          type = "follow-up";
+          label = "Needs Follow-up";
+          copy = "Rejected DTR needs remarks review and correction.";
+        } else if (issueCount > 0) {
+          type = "follow-up";
+          label = "Needs Follow-up";
+          copy = `${issueCount} requirement${issueCount === 1 ? "" : "s"} need reupload.`;
+        } else if (latestCutoff && !cutoffDtr) {
+          type = "missing";
+          label = "Missing DTR";
+          copy = `No DTR submitted for ${latestCutoff}.`;
+        } else if (cutoffDtr?.status === "Pending Review") {
+          type = "pending";
+          label = "Pending Review";
+          copy = "DTR is waiting for review, not correction.";
+        } else if (!isOnline) {
+          type = "watch";
+          label = "Offline";
+          copy = "No urgent DTR issue, but guard is currently offline.";
+        }
+
+        return {
+          copy,
+          cutoffDtr,
+          isDirect,
+          isOnline,
+          label,
+          latestDtr,
+          member,
+          type,
+        };
+      })
+      .filter((item) => {
+        if (actionFilter === "all") return true;
+        if (actionFilter === "direct") return item.isDirect;
+        return item.type === actionFilter;
+      })
+      .sort((left, right) => {
+        const rankDifference = (actionRank[left.type] ?? 9) - (actionRank[right.type] ?? 9);
+        if (rankDifference !== 0) return rankDifference;
+        return (left.member.full_name || "").localeCompare(right.member.full_name || "");
+      })
+      .slice(0, 10);
+  }, [actionFilter, latestCutoff, latestCutoffDtrByUserId, latestDtrByUserId, profile?.id, requirementIssueCountByUserId, teamProfiles]);
+
   const attendanceBoard = useMemo(() => {
     return teamProfiles
       .map((member) => ({
@@ -177,6 +275,57 @@ export default function SupervisorDashboardHome({ profile }) {
           </Card>
         ))}
       </div>
+
+      <Card>
+        <div className="admin-section-head">
+          <div>
+            <h2 className="admin-section-title admin-dashboard-home__section-title">Team Action Queue</h2>
+            <p className="admin-section-copy">
+              {latestCutoff
+                ? `Prioritized guard follow-ups for ${latestCutoff}. Pending Review means wait; Needs Follow-up means fix something.`
+                : "Team actions appear after the first active cutoff submission."}
+            </p>
+          </div>
+          <Link className="admin-link" to="/supervisor/dtr">
+            Open Team DTR
+          </Link>
+        </div>
+        <div className="supervisor-dashboard-home__action-filters">
+          {actionFilters.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              className={`supervisor-dashboard-home__action-filter${
+                actionFilter === filter.value ? " supervisor-dashboard-home__action-filter--active" : ""
+              }`}
+              onClick={() => setActionFilter(filter.value)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+        <div className="supervisor-dashboard-home__action-list">
+          {teamActionQueue.map((item) => (
+            <div key={item.member.id} className={`admin-list-card supervisor-dashboard-home__action-item supervisor-dashboard-home__action-item--${item.type}`}>
+              <div className="supervisor-dashboard-home__team-main">
+                <div className="supervisor-dashboard-home__action-title-row">
+                  <p className="admin-dashboard-home__activity-name">{item.member.full_name || "Unnamed Guard"}</p>
+                  {item.isDirect ? <span className="app-pill app-pill--success">Direct</span> : null}
+                </div>
+                <p className="app-copy-sm">
+                  {item.member.employee_id || "No employee ID"} | {item.member.branch || item.member.location || "No assignment"}
+                </p>
+                <p className="app-copy-xs-muted">{item.copy}</p>
+              </div>
+              <div className="supervisor-dashboard-home__action-status">
+                <span className={`app-pill supervisor-dashboard-home__action-pill supervisor-dashboard-home__action-pill--${item.type}`}>{item.label}</span>
+                <PresenceBadge lastSeenAt={item.member.last_seen_at} />
+              </div>
+            </div>
+          ))}
+          {teamActionQueue.length === 0 ? <p className="admin-empty-copy">No guards match this action filter.</p> : null}
+        </div>
+      </Card>
 
       <div className="admin-sections-grid admin-sections-grid--analytics">
         <Card>

@@ -149,12 +149,17 @@ export default function EmployeeDashboard({ user, profile, refreshProfile }) {
           <EmployeeDashboardMain
             adminFeedback={dashboard.adminFeedback}
             assignment={dashboard.assignment}
+            cutoff={dashboard.cutoff}
             dashboardVariant={dashboard.dashboardVariant}
             person={dashboard.person}
             profileCompletenessSummary={dashboard.profileCompletenessSummary}
             submissions={dashboard.submissions}
             dtrReviewLoadingId={dashboard.dtrReviewLoadingId}
+            unreadMessagesCount={dashboard.unreadMessagesCount}
+            onOpenDocuments={() => setActiveView("documents")}
             onOpenDtrReview={dashboard.openDtrReview}
+            onOpenMessages={handleOpenMessagesView}
+            onShortcutSubmitDtr={handleSubmitDtrShortcut}
             recentSubmissionsFocusRequestKey={recentSubmissionsFocusRequestKey}
             summary={dashboard.summary}
           />

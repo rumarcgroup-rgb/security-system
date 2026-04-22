@@ -4,15 +4,23 @@ import { IdCard, MapPin } from "lucide-react";
 import Card from "../../../components/ui/Card";
 import StatusBadge from "../../../components/ui/StatusBadge";
 
+function getLatestSubmissionByStatus(submissions, status) {
+  return submissions.find((item) => item.status === status) || null;
+}
 
 export default function EmployeeDashboardMain({
   adminFeedback,
   assignment,
+  cutoff,
   dashboardVariant,
   dtrReviewLoadingId,
   person,
   profileCompletenessSummary,
+  unreadMessagesCount,
+  onOpenDocuments,
   onOpenDtrReview,
+  onOpenMessages,
+  onShortcutSubmitDtr,
   recentSubmissionsFocusRequestKey,
   submissions,
   summary,
@@ -29,6 +37,67 @@ export default function EmployeeDashboardMain({
   const hasFileAction = summary.flaggedDocs > 0;
   const hasNeedsAction = needsActionTotal > 0;
   const isProfileComplete = profileCompletenessSummary.percent >= 100;
+  const currentCutoffSubmission = useMemo(() => {
+    return submissions.find((item) => item.cutoff === cutoff) || null;
+  }, [cutoff, submissions]);
+  const latestRejectedSubmission = useMemo(() => getLatestSubmissionByStatus(submissions, "Rejected"), [submissions]);
+  const dailyActionState = useMemo(() => {
+    if (latestRejectedSubmission) {
+      return {
+        tone: "danger",
+        title: "Rejected DTR needs correction",
+        copy: "Review admin remarks, replace the wrong file if needed, then send it back for review.",
+        status: "Needs Action",
+        actionLabel: dtrReviewLoadingId === latestRejectedSubmission.id ? "Loading DTR..." : "Review rejected DTR",
+        disabled: dtrReviewLoadingId === latestRejectedSubmission.id,
+        onAction: () => onOpenDtrReview(latestRejectedSubmission),
+      };
+    }
+
+    if (currentCutoffSubmission?.status === "Pending Review") {
+      return {
+        tone: "waiting",
+        title: "Current cutoff is pending review",
+        copy: "Your DTR is already submitted. Wait for admin or supervisor review unless you uploaded the wrong file.",
+        status: "Pending Review",
+        actionLabel: dtrReviewLoadingId === currentCutoffSubmission.id ? "Loading DTR..." : "Review DTR",
+        disabled: dtrReviewLoadingId === currentCutoffSubmission.id,
+        onAction: () => onOpenDtrReview(currentCutoffSubmission),
+      };
+    }
+
+    if (currentCutoffSubmission?.status === "Approved") {
+      return {
+        tone: "success",
+        title: "Current cutoff is approved",
+        copy: "This cutoff is cleared. Keep watching messages for any assignment or payroll updates.",
+        status: "Approved",
+        actionLabel: "Open messages",
+        onAction: onOpenMessages,
+      };
+    }
+
+    if (currentCutoffSubmission?.status === "Rejected") {
+      return {
+        tone: "danger",
+        title: "Current cutoff needs reupload",
+        copy: "Review remarks and upload the corrected DTR from the review screen.",
+        status: "Needs Action",
+        actionLabel: dtrReviewLoadingId === currentCutoffSubmission.id ? "Loading DTR..." : "Review DTR",
+        disabled: dtrReviewLoadingId === currentCutoffSubmission.id,
+        onAction: () => onOpenDtrReview(currentCutoffSubmission),
+      };
+    }
+
+    return {
+      tone: "primary",
+      title: "Current cutoff needs DTR",
+      copy: "Submit your DTR for this cutoff so payroll review can start.",
+      status: "Not Submitted",
+      actionLabel: "Submit DTR",
+      onAction: onShortcutSubmitDtr,
+    };
+  }, [currentCutoffSubmission, dtrReviewLoadingId, latestRejectedSubmission, onOpenDtrReview, onOpenMessages, onShortcutSubmitDtr]);
 
   useEffect(() => {
     return () => {
@@ -104,6 +173,55 @@ export default function EmployeeDashboardMain({
         </div>
       </Card>
 
+      <Card className={`employee-dashboard__daily-action-card employee-dashboard__daily-action-card--${dailyActionState.tone}`}>
+        <div className="employee-dashboard__daily-action-header">
+          <div>
+            <p className="employee-dashboard__copy-xs">Today&apos;s Work Loop</p>
+            <h3 className="employee-dashboard__subsection-title employee-dashboard__subsection-title--tight">{dailyActionState.title}</h3>
+            <p className="app-copy-sm">{dailyActionState.copy}</p>
+          </div>
+          <StatusBadge status={dailyActionState.status} />
+        </div>
+        <div className="employee-dashboard__daily-action-grid">
+          <div className="employee-dashboard__daily-action-tile">
+            <span>Current cutoff</span>
+            <strong>{cutoff || "No cutoff selected"}</strong>
+          </div>
+          <div className="employee-dashboard__daily-action-tile">
+            <span>DTR fixes</span>
+            <strong>{summary.rejectedDtrs}</strong>
+          </div>
+          <div className="employee-dashboard__daily-action-tile">
+            <span>File fixes</span>
+            <strong>{summary.flaggedDocs}</strong>
+          </div>
+          <div className="employee-dashboard__daily-action-tile">
+            <span>Unread messages</span>
+            <strong>{unreadMessagesCount}</strong>
+          </div>
+        </div>
+        <div className="employee-dashboard__daily-action-footer">
+          <button
+            type="button"
+            className="employee-dashboard__daily-action-button"
+            disabled={dailyActionState.disabled}
+            onClick={dailyActionState.onAction}
+          >
+            {dailyActionState.actionLabel}
+          </button>
+          {hasFileAction ? (
+            <button type="button" className="app-link-button employee-dashboard__daily-action-link" onClick={onOpenDocuments}>
+              Open Documents
+            </button>
+          ) : null}
+          {unreadMessagesCount > 0 ? (
+            <button type="button" className="app-link-button employee-dashboard__daily-action-link" onClick={onOpenMessages}>
+              Check Messages
+            </button>
+          ) : null}
+        </div>
+      </Card>
+
       <div className="employee-dashboard__info-grid">
         <Card className="employee-dashboard__assignment-card">
           <div className="employee-dashboard__section-head">
@@ -173,10 +291,27 @@ export default function EmployeeDashboardMain({
           <h3 className="employee-dashboard__subsection-title employee-dashboard__subsection-title--tight">Needs Action Guidance</h3>
           <div className="employee-dashboard__guidance-list">
             {hasRejectedDtrAction ? (
-              <p className="app-copy-sm">Review the admin remarks on your rejected DTR, then submit a corrected DTR for review.</p>
+              <div className="employee-dashboard__guidance-item">
+                <p className="app-copy-sm">Review the admin remarks on your rejected DTR, then reupload the corrected file from the DTR review screen.</p>
+                {latestRejectedSubmission ? (
+                  <button
+                    type="button"
+                    className="app-link-button"
+                    disabled={dtrReviewLoadingId === latestRejectedSubmission.id}
+                    onClick={() => onOpenDtrReview(latestRejectedSubmission)}
+                  >
+                    {dtrReviewLoadingId === latestRejectedSubmission.id ? "Loading DTR..." : "Review rejected DTR"}
+                  </button>
+                ) : null}
+              </div>
             ) : null}
             {hasFileAction ? (
-              <p className="app-copy-sm">Open Documents and upload replacements for missing files or files marked Needs Reupload.</p>
+              <div className="employee-dashboard__guidance-item">
+                <p className="app-copy-sm">Open Documents and upload replacements for missing files or files marked Needs Reupload.</p>
+                <button type="button" className="app-link-button" onClick={onOpenDocuments}>
+                  Open Documents
+                </button>
+              </div>
             ) : null}
           </div>
         </Card>

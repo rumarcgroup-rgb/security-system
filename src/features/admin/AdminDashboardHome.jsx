@@ -13,9 +13,11 @@ import "./AdminDashboardHome.css";
 
 const metricCards = [
   { key: "pendingDtr", label: "Pending DTR", icon: Clock3, tone: "amber" },
+  { key: "pendingAged", label: "Pending 2+ Days", icon: Clock3, tone: "orange" },
   { key: "pendingRequirements", label: "Pending Requirements", icon: FileText, tone: "rose" },
   { key: "pendingSignatures", label: "Pending Signatures", icon: ShieldCheck, tone: "brand" },
   { key: "needsReupload", label: "Needs Reupload", icon: RefreshCcw, tone: "orange" },
+  { key: "unassignedGuards", label: "Unassigned Guards", icon: Users, tone: "rose" },
   { key: "approvedToday", label: "Approved Today", icon: CheckCircle2, tone: "emerald" },
   { key: "activeEmployees", label: "Active Employees", icon: Users, tone: "brand" },
   { key: "onlineEmployees", label: "Online Now", icon: Activity, tone: "emerald-dark" },
@@ -30,6 +32,23 @@ const quickActions = [
 
 function getRequirementTypeLabel(row) {
   return row.requirement_type === "Signature" ? "Signature" : row.document_type || "Requirement";
+}
+
+function getAgeDays(dateValue) {
+  if (!dateValue) return 0;
+  const ageMs = Date.now() - new Date(dateValue).getTime();
+  return Math.max(Math.floor(ageMs / 86400000), 0);
+}
+
+function getPendingAgeLabel(row) {
+  const days = getAgeDays(row.created_at);
+  if (days <= 0) return "New today";
+  return `${days} day${days === 1 ? "" : "s"} waiting`;
+}
+
+function isUnassignedEmployee(profile) {
+  if (!profile || profile.role === "admin") return false;
+  return !profile.location || !profile.branch || (profile.role === "employee" && !profile.supervisor_user_id && !profile.supervisor);
 }
 
 function getDashboardSoundPreferenceKey(profileId) {
@@ -192,6 +211,7 @@ export default function AdminDashboardHome({ profile }) {
     const activeEmployees = profiles.filter((profile) => profile.role !== "admin").length;
     const onlineEmployees = profiles.filter((profile) => profile.role !== "admin" && isEmployeeOnline(profile.last_seen_at)).length;
     const pendingDtr = allDtrRows.filter((row) => row.status === "Pending Review").length;
+    const pendingAged = allDtrRows.filter((row) => row.status === "Pending Review" && getAgeDays(row.created_at) >= 2).length;
     const approvedToday = allDtrRows.filter(
       (row) => row.status === "Approved" && row.approved_at && new Date(row.approved_at).toISOString().slice(0, 10) === today
     ).length;
@@ -203,9 +223,11 @@ export default function AdminDashboardHome({ profile }) {
 
     return {
       pendingDtr,
+      pendingAged,
       pendingRequirements,
       pendingSignatures,
       needsReupload,
+      unassignedGuards: profiles.filter(isUnassignedEmployee).length,
       approvedToday,
       activeEmployees,
       onlineEmployees,
@@ -238,6 +260,23 @@ export default function AdminDashboardHome({ profile }) {
       .map((branch) => ({ branch, count: grouped[branch] }))
       .slice(0, 5);
   }, [profiles]);
+
+  const priorityQueues = useMemo(() => {
+    return {
+      agedPendingDtr: allDtrRows
+        .filter((row) => row.status === "Pending Review" && getAgeDays(row.created_at) >= 2)
+        .sort((left, right) => new Date(left.created_at || 0) - new Date(right.created_at || 0))
+        .slice(0, 5),
+      needsReupload: allRequirementRows
+        .filter((row) => row.status === "Needs Reupload")
+        .sort((left, right) => new Date(left.created_at || 0) - new Date(right.created_at || 0))
+        .slice(0, 5),
+      unassignedGuards: profiles
+        .filter(isUnassignedEmployee)
+        .sort((left, right) => (left.full_name || "").localeCompare(right.full_name || ""))
+        .slice(0, 5),
+    };
+  }, [allDtrRows, allRequirementRows, profiles]);
 
   if (loading) {
     return <p className="admin-loading-copy">Loading dashboard metrics...</p>;
@@ -279,6 +318,81 @@ export default function AdminDashboardHome({ profile }) {
           </Card>
         ))}
       </div>
+
+      <Card>
+        <div className="admin-section-head">
+          <div>
+            <h2 className="admin-section-title admin-dashboard-home__section-title">Priority Queue</h2>
+            <p className="admin-section-copy">Clear the oldest work first. Pending Review means wait; Needs Reupload means someone must fix a file.</p>
+          </div>
+        </div>
+        <div className="admin-dashboard-home__priority-grid">
+          <div className="admin-dashboard-home__priority-panel">
+            <div className="admin-dashboard-home__priority-head">
+              <p className="admin-dashboard-home__priority-title">Pending 2+ Days</p>
+              <Link className="admin-link" to="/admin/dtr-submissions">
+                Review DTR
+              </Link>
+            </div>
+            <div className="admin-dashboard-home__priority-list">
+              {priorityQueues.agedPendingDtr.map((row) => (
+                <div key={row.id} className="admin-dashboard-home__priority-item">
+                  <div>
+                    <p className="admin-dashboard-home__activity-name">{row.profiles?.full_name || "Unknown Employee"}</p>
+                    <p className="app-copy-xs-muted">{row.cutoff || "No cutoff"} | {getPendingAgeLabel(row)}</p>
+                  </div>
+                  <StatusBadge status={row.status} />
+                </div>
+              ))}
+              {priorityQueues.agedPendingDtr.length === 0 ? <p className="admin-empty-copy">No aged pending DTRs.</p> : null}
+            </div>
+          </div>
+
+          <div className="admin-dashboard-home__priority-panel admin-dashboard-home__priority-panel--rose">
+            <div className="admin-dashboard-home__priority-head">
+              <p className="admin-dashboard-home__priority-title">Needs Reupload</p>
+              <Link className="admin-link" to="/admin/requirements">
+                Review Files
+              </Link>
+            </div>
+            <div className="admin-dashboard-home__priority-list">
+              {priorityQueues.needsReupload.map((row) => (
+                <div key={row.id} className="admin-dashboard-home__priority-item">
+                  <div>
+                    <p className="admin-dashboard-home__activity-name">{row.profiles?.full_name || "Unknown Employee"}</p>
+                    <p className="app-copy-xs-muted">{getRequirementTypeLabel(row)} needs replacement</p>
+                  </div>
+                  <StatusBadge status={row.status} />
+                </div>
+              ))}
+              {priorityQueues.needsReupload.length === 0 ? <p className="admin-empty-copy">No files waiting for reupload.</p> : null}
+            </div>
+          </div>
+
+          <div className="admin-dashboard-home__priority-panel admin-dashboard-home__priority-panel--slate">
+            <div className="admin-dashboard-home__priority-head">
+              <p className="admin-dashboard-home__priority-title">Unassigned Guards</p>
+              <Link className="admin-link" to="/admin/users">
+                Manage Users
+              </Link>
+            </div>
+            <div className="admin-dashboard-home__priority-list">
+              {priorityQueues.unassignedGuards.map((row) => (
+                <div key={row.id} className="admin-dashboard-home__priority-item">
+                  <div>
+                    <p className="admin-dashboard-home__activity-name">{row.full_name || "Unnamed Employee"}</p>
+                    <p className="app-copy-xs-muted">
+                      {[row.location || "No area", row.branch || "No branch", row.supervisor_user_id || row.supervisor ? "Supervisor set" : "No supervisor"].join(" | ")}
+                    </p>
+                  </div>
+                  <span className="app-pill app-pill--warning">Assign</span>
+                </div>
+              ))}
+              {priorityQueues.unassignedGuards.length === 0 ? <p className="admin-empty-copy">All visible guards have assignments.</p> : null}
+            </div>
+          </div>
+        </div>
+      </Card>
 
       <div className="admin-sections-grid admin-sections-grid--analytics">
         <Card>

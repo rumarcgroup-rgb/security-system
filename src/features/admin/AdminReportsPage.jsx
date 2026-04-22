@@ -3,7 +3,10 @@ import { motion } from "framer-motion";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import { sortAreas } from "../../lib/areas";
+import { getCutoffLabelFromDate } from "../../lib/dtr";
 import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
+import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
+import { useLiveRequirementsStore } from "../realtime/useLiveRequirementsStore";
 import "./AdminReportsPage.css";
 
 const statusColors = {
@@ -18,11 +21,22 @@ function csvValue(value) {
 }
 
 export default function AdminReportsPage({ profile }) {
-  const { rows, loading } = useLiveDtrStore({
+  const { rows, loading: dtrLoading } = useLiveDtrStore({
     currentRole: "admin",
     currentUserId: profile?.id,
     scopeProfile: profile,
   });
+  const { profiles, loading: peopleLoading } = useLivePeopleStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
+  const { rows: requirementRows, loading: requirementsLoading } = useLiveRequirementsStore({
+    currentRole: "admin",
+    currentUserId: profile?.id,
+    scopeProfile: profile,
+  });
+  const loading = dtrLoading || peopleLoading || requirementsLoading;
 
   const metrics = useMemo(() => {
     const total = rows.length;
@@ -108,6 +122,76 @@ export default function AdminReportsPage({ profile }) {
       .slice(0, 10);
   }, [rows]);
 
+  const activeCutoff = rows[0]?.cutoff || getCutoffLabelFromDate(new Date());
+
+  const readinessRows = useMemo(() => {
+    const latestDtrByUserId = new Map();
+    rows.forEach((row) => {
+      if (row.cutoff !== activeCutoff || !row.user_id) return;
+      const current = latestDtrByUserId.get(row.user_id);
+      if (!current || new Date(row.created_at || 0) > new Date(current.created_at || 0)) {
+        latestDtrByUserId.set(row.user_id, row);
+      }
+    });
+
+    const requirementIssuesByUserId = requirementRows.reduce((map, row) => {
+      if (row.status !== "Needs Reupload") return map;
+      map.set(row.user_id, (map.get(row.user_id) || 0) + 1);
+      return map;
+    }, new Map());
+
+    return profiles
+      .filter((item) => item.role !== "admin")
+      .map((employee) => {
+        const dtr = latestDtrByUserId.get(employee.id) || null;
+        const fileIssues = requirementIssuesByUserId.get(employee.id) || 0;
+        let readiness = "Missing";
+        let nextAction = "Follow up with guard or supervisor to submit DTR.";
+
+        if (dtr?.status === "Approved") {
+          readiness = fileIssues > 0 ? "Needs Action" : "Submitted";
+          nextAction = fileIssues > 0 ? "Open requirements and request replacement files." : "Ready for payroll review.";
+        } else if (dtr?.status === "Pending Review") {
+          readiness = fileIssues > 0 ? "Needs Action" : "Pending Review";
+          nextAction = fileIssues > 0 ? "Review DTR and replacement file issue." : "Wait for admin or supervisor review.";
+        } else if (dtr?.status === "Rejected") {
+          readiness = "Needs Action";
+          nextAction = "Guard must review remarks and reupload corrected DTR.";
+        }
+
+        return {
+          branch: employee.branch || "No branch",
+          cutoff: activeCutoff,
+          dtr,
+          employee,
+          fileIssues,
+          location: employee.location || "Unassigned",
+          nextAction,
+          readiness,
+        };
+      })
+      .sort((left, right) => {
+        const rank = { "Needs Action": 0, Missing: 1, "Pending Review": 2, Submitted: 3 };
+        const rankDifference = (rank[left.readiness] ?? 9) - (rank[right.readiness] ?? 9);
+        if (rankDifference !== 0) return rankDifference;
+        return (left.employee.full_name || "").localeCompare(right.employee.full_name || "");
+      });
+  }, [activeCutoff, profiles, requirementRows, rows]);
+
+  const readinessSummary = useMemo(() => {
+    return readinessRows.reduce(
+      (acc, row) => {
+        acc.total += 1;
+        if (row.dtr) acc.submitted += 1;
+        if (row.readiness === "Pending Review") acc.pending += 1;
+        if (row.readiness === "Missing") acc.missing += 1;
+        if (row.readiness === "Needs Action") acc.needsAction += 1;
+        return acc;
+      },
+      { total: 0, submitted: 0, pending: 0, missing: 0, needsAction: 0 }
+    );
+  }, [readinessRows]);
+
   function exportDtrCsv() {
     const headers = [
       "Guard",
@@ -143,6 +227,41 @@ export default function AdminReportsPage({ profile }) {
     URL.revokeObjectURL(url);
   }
 
+  function exportCutoffReadinessCsv() {
+    const headers = [
+      "Guard",
+      "Employee ID",
+      "Location",
+      "Branch",
+      "Cutoff",
+      "Readiness",
+      "DTR Status",
+      "Submitted At",
+      "File Issues",
+      "Next Action",
+    ];
+    const csvRows = readinessRows.map((row) => [
+      row.employee.full_name,
+      row.employee.employee_id,
+      row.location,
+      row.branch,
+      row.cutoff,
+      row.readiness,
+      row.dtr?.status || "Missing",
+      row.dtr?.created_at || "",
+      row.fileIssues,
+      row.nextAction,
+    ]);
+    const csv = [headers, ...csvRows].map((line) => line.map(csvValue).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `cutoff-readiness-${activeCutoff.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (loading) {
     return <p className="admin-loading-copy">Loading report analytics...</p>;
   }
@@ -156,6 +275,9 @@ export default function AdminReportsPage({ profile }) {
             <p className="admin-section-copy">Download the live DTR dataset for payroll review, audit checks, or spreadsheet cleanup.</p>
           </div>
           <div className="admin-reports-page__export-actions">
+            <Button variant="secondary" onClick={exportCutoffReadinessCsv} disabled={readinessRows.length === 0}>
+              Export Cutoff Readiness
+            </Button>
             <Button variant="secondary" onClick={exportDtrCsv} disabled={rows.length === 0}>
               Export DTR CSV
             </Button>
@@ -245,6 +367,52 @@ export default function AdminReportsPage({ profile }) {
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card>
+        <div className="admin-section-head">
+          <div>
+            <h3 className="admin-section-title admin-reports-page__section-title">Cutoff Readiness</h3>
+            <p className="admin-section-copy admin-reports-page__summary-copy">
+              Active cutoff: {activeCutoff}. Submitted means ready or in review; Needs Action means rejected DTR or files to fix.
+            </p>
+          </div>
+        </div>
+        <div className="admin-reports-page__readiness-grid">
+          <MetricCard label="Roster" value={readinessSummary.total} />
+          <MetricCard label="Submitted" value={readinessSummary.submitted} tone="emerald" />
+          <MetricCard label="Pending Review" value={readinessSummary.pending} tone="amber" />
+          <MetricCard label="Missing" value={readinessSummary.missing} tone="rose" />
+          <MetricCard label="Needs Action" value={readinessSummary.needsAction} tone="rose" />
+        </div>
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr className="admin-table-head-row admin-table-head-row--sm">
+                <th className="admin-table-head-cell">Guard</th>
+                <th className="admin-table-head-cell">Assignment</th>
+                <th className="admin-table-head-cell">Readiness</th>
+                <th className="admin-table-head-cell">DTR Status</th>
+                <th className="admin-table-head-cell">Next Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {readinessRows.slice(0, 12).map((row) => (
+                <tr key={row.employee.id} className="admin-table-row">
+                  <td className="admin-table-cell">
+                    <p className="admin-text-strong">{row.employee.full_name || "Unnamed Employee"}</p>
+                    <p className="admin-copy-xs-muted">{row.employee.employee_id || "No employee ID"}</p>
+                  </td>
+                  <td className="admin-table-cell">{row.location} / {row.branch}</td>
+                  <td className="admin-table-cell">{row.readiness}</td>
+                  <td className="admin-table-cell">{row.dtr?.status || "Missing"}</td>
+                  <td className="admin-table-cell">{row.nextAction}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {readinessRows.length === 0 ? <p className="admin-empty-copy admin-reports-page__empty">No employee roster data available yet.</p> : null}
       </Card>
 
       <Card>

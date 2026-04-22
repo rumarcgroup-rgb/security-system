@@ -3,7 +3,7 @@ export default function StatusBadge({ status }) {
   const tone =
     normalized.includes("approved") || normalized.includes("verified")
       ? "bg-emerald-100 text-emerald-700"
-      : normalized.includes("reject") || normalized.includes("reupload")
+      : normalized.includes("reject") || normalized.includes("reupload") || normalized.includes("action")
       ? "bg-rose-100 text-rose-700"
       : normalized.includes("missing")
       ? "bg-slate-200 text-slate-700"

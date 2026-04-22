@@ -84,6 +84,13 @@
   color: #334155;
 }
 
+.admin-reports-page__readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
 .admin-reports-page__metric-value--emerald {
   color: #059669;
 }
@@ -94,6 +101,10 @@
 
 .admin-reports-page__metric-value--brand {
   color: var(--brand-600, #2563eb);
+}
+
+.admin-reports-page__metric-value--rose {
+  color: #e11d48;
 }
 
 @media (max-width: 767px) {
@@ -111,6 +122,12 @@
 
   .admin-reports-page__trend-frame {
     height: 7rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .admin-reports-page__readiness-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 

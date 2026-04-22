@@ -136,6 +136,54 @@
   gap: 0.75rem;
 }
 
+.admin-dashboard-home__priority-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.admin-dashboard-home__priority-panel {
+  border: 1px solid #fde68a;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff7ed 100%);
+  padding: 1rem;
+}
+
+.admin-dashboard-home__priority-panel--rose {
+  border-color: #fecdd3;
+  background: linear-gradient(180deg, #fff7f7 0%, #fff1f2 100%);
+}
+
+.admin-dashboard-home__priority-panel--slate {
+  border-color: #cbd5e1;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.admin-dashboard-home__priority-head,
+.admin-dashboard-home__priority-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-dashboard-home__priority-title {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.admin-dashboard-home__priority-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.admin-dashboard-home__priority-item {
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.75rem;
+}
+
 .supervisor-dashboard-home__team-list {
   display: flex;
   flex-direction: column;
@@ -146,6 +194,103 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.supervisor-dashboard-home__action-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 1rem 0;
+}
+
+.supervisor-dashboard-home__action-filter {
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #1e40af;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.supervisor-dashboard-home__action-filter--active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: white;
+}
+
+.supervisor-dashboard-home__action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.supervisor-dashboard-home__action-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.supervisor-dashboard-home__action-item--follow-up {
+  border-color: #fecdd3;
+  background: #fff7f7;
+}
+
+.supervisor-dashboard-home__action-item--missing {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.supervisor-dashboard-home__action-item--pending {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.supervisor-dashboard-home__action-title-row,
+.supervisor-dashboard-home__action-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.supervisor-dashboard-home__action-status {
+  justify-content: flex-start;
+}
+
+.supervisor-dashboard-home__action-pill {
+  border: 1px solid transparent;
+}
+
+.supervisor-dashboard-home__action-pill--follow-up {
+  border-color: #fecdd3;
+  background: #ffe4e6;
+  color: #be123c;
+}
+
+.supervisor-dashboard-home__action-pill--missing {
+  border-color: #fed7aa;
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.supervisor-dashboard-home__action-pill--pending {
+  border-color: #fde68a;
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.supervisor-dashboard-home__action-pill--watch {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.supervisor-dashboard-home__action-pill--clear {
+  border-color: #bbf7d0;
+  background: #dcfce7;
+  color: #15803d;
 }
 
 .supervisor-dashboard-home__team-item {
@@ -263,7 +408,8 @@
 
   .admin-dashboard-home__activity-item,
   .supervisor-dashboard-home__team-item,
-  .supervisor-dashboard-home__attendance-item {
+  .supervisor-dashboard-home__attendance-item,
+  .supervisor-dashboard-home__action-item {
     align-items: flex-start;
   }
 
@@ -277,11 +423,20 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .admin-dashboard-home__priority-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .admin-dashboard-home__activity-item,
   .supervisor-dashboard-home__team-item,
-  .supervisor-dashboard-home__attendance-item {
+  .supervisor-dashboard-home__attendance-item,
+  .supervisor-dashboard-home__action-item {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
+  }
+
+  .supervisor-dashboard-home__action-status {
+    justify-content: flex-end;
   }
 }
