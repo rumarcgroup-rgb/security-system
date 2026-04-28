@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { isAdminRole } from "../../lib/roles";
 import {
   MESSAGE_THREAD_SUMMARY_SELECT,
   applyMessageThreadScope,
@@ -33,7 +34,7 @@ function isRelevantThreadForRole(thread, currentRole, currentUserId) {
     return thread.supervisor_user_id === currentUserId;
   }
 
-  if (currentRole === "admin") {
+  if (isAdminRole(currentRole)) {
     return !thread.supervisor_user_id || thread.escalated_to_admin;
   }
 

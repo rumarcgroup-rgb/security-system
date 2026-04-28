@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import Card from "../../components/ui/Card";
 import Input from "../../components/ui/Input";
@@ -8,6 +9,7 @@ import { getBranchesForArea } from "../../lib/branches";
 import { buildCutoffOptions } from "../../lib/dtr";
 import { supabase } from "../../lib/supabase";
 import { REQUIRED_DOCUMENTS } from "../employee/employeeDashboardConfig";
+import { isSuperAdminRole } from "../../lib/roles";
 import "./AdminSettingsPage.css";
 
 function getDashboardSoundPreferenceKey(profileId) {
@@ -15,6 +17,7 @@ function getDashboardSoundPreferenceKey(profileId) {
 }
 
 export default function AdminSettingsPage({ profile, refreshProfile }) {
+  const canAccessSettings = isSuperAdminRole(profile?.role);
   const [form, setForm] = useState({
     full_name: "",
     location: "",
@@ -72,6 +75,10 @@ export default function AdminSettingsPage({ profile, refreshProfile }) {
       { label: "Upcoming Cutoffs", value: cutoffOptions.length, copy: cutoffOptions.slice(0, 3).join(", ") },
     ];
   }, []);
+
+  if (!canAccessSettings) {
+    return <Navigate to="/admin" replace />;
+  }
 
   function setField(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -187,7 +194,7 @@ export default function AdminSettingsPage({ profile, refreshProfile }) {
           </div>
           <div className="admin-card-panel admin-settings-page__note">
             <p className="app-note-title">Access model</p>
-            <p className="app-note-copy">Admin access is controlled through `profiles.role = 'admin'` and enforced in RLS.</p>
+            <p className="app-note-copy">Admin access is controlled through `super_admin` and `admin_ops` roles in `profiles.role` and enforced in RLS.</p>
           </div>
           <div className="admin-card-panel admin-settings-page__note">
             <p className="app-note-title">Current admin account</p>

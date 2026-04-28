@@ -1,3 +1,5 @@
+import { isAdminRole } from "./roles";
+
 export function getSupervisorScopeLabel(profile) {
   if (!profile?.location) return "No area assigned";
   return profile.branch ? `${profile.location} / ${profile.branch}` : profile.location;
@@ -18,6 +20,6 @@ export function matchesSupervisorScope(target, supervisorProfile) {
 }
 
 export function isScopedEmployee(profile, supervisorProfile) {
-  if (!profile || profile.role === "admin") return false;
+  if (!profile || isAdminRole(profile.role)) return false;
   return matchesSupervisorScope(profile, supervisorProfile);
 }

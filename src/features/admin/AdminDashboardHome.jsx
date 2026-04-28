@@ -6,6 +6,7 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import { sortAreas } from "../../lib/areas";
 import { sortBranches } from "../../lib/branches";
 import { isEmployeeOnline } from "../../lib/presence";
+import { isAdminRole, isSuperAdminRole } from "../../lib/roles";
 import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
 import { useLiveRequirementsStore } from "../realtime/useLiveRequirementsStore";
 import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
@@ -27,7 +28,7 @@ const metricCards = [
 const quickActions = [
   { to: "/admin/dtr-submissions", label: "Review DTR", copy: "Approve or reject employee DTR uploads." },
   { to: "/admin/requirements", label: "Review Requirements", copy: "Check employee documents and signatures." },
-  { to: "/admin/users", label: "Manage Users", copy: "Assign areas, branches, and positions." },
+  { to: "/admin/users", label: "Manage Users", copy: "Assign areas, branches, and positions.", superAdminOnly: true },
 ];
 
 function getRequirementTypeLabel(row) {
@@ -47,7 +48,7 @@ function getPendingAgeLabel(row) {
 }
 
 function isUnassignedEmployee(profile) {
-  if (!profile || profile.role === "admin") return false;
+  if (!profile || isAdminRole(profile.role)) return false;
   return !profile.location || !profile.branch || (profile.role === "employee" && !profile.supervisor_user_id && !profile.supervisor);
 }
 
@@ -98,6 +99,7 @@ function playSoftNotificationSound(tone) {
 }
 
 export default function AdminDashboardHome({ profile }) {
+  const isSuperAdmin = isSuperAdminRole(profile?.role);
   const [highlightedDtrId, setHighlightedDtrId] = useState(null);
   const [highlightedRequirementId, setHighlightedRequirementId] = useState(null);
   const [soundMuted, setSoundMuted] = useState(false);
@@ -208,8 +210,8 @@ export default function AdminDashboardHome({ profile }) {
 
   const metrics = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
-    const activeEmployees = profiles.filter((profile) => profile.role !== "admin").length;
-    const onlineEmployees = profiles.filter((profile) => profile.role !== "admin" && isEmployeeOnline(profile.last_seen_at)).length;
+    const activeEmployees = profiles.filter((profile) => !isAdminRole(profile.role)).length;
+    const onlineEmployees = profiles.filter((profile) => !isAdminRole(profile.role) && isEmployeeOnline(profile.last_seen_at)).length;
     const pendingDtr = allDtrRows.filter((row) => row.status === "Pending Review").length;
     const pendingAged = allDtrRows.filter((row) => row.status === "Pending Review" && getAgeDays(row.created_at) >= 2).length;
     const approvedToday = allDtrRows.filter(
@@ -237,7 +239,7 @@ export default function AdminDashboardHome({ profile }) {
 
   const locationSummary = useMemo(() => {
     const grouped = profiles.reduce((acc, profile) => {
-      if (profile.role === "admin") return acc;
+      if (isAdminRole(profile.role)) return acc;
       const key = profile.location || "Unassigned";
       acc[key] = (acc[key] || 0) + 1;
       return acc;
@@ -250,7 +252,7 @@ export default function AdminDashboardHome({ profile }) {
 
   const branchSummary = useMemo(() => {
     const grouped = profiles.reduce((acc, profile) => {
-      if (profile.role === "admin") return acc;
+      if (isAdminRole(profile.role)) return acc;
       const key = profile.branch || "Unassigned";
       acc[key] = (acc[key] || 0) + 1;
       return acc;
@@ -278,6 +280,11 @@ export default function AdminDashboardHome({ profile }) {
     };
   }, [allDtrRows, allRequirementRows, profiles]);
 
+  const visibleQuickActions = useMemo(
+    () => quickActions.filter((action) => !action.superAdminOnly || isSuperAdmin),
+    [isSuperAdmin]
+  );
+
   if (loading) {
     return <p className="admin-loading-copy">Loading dashboard metrics...</p>;
   }
@@ -292,7 +299,7 @@ export default function AdminDashboardHome({ profile }) {
           </div>
         </div>
         <div className="admin-dashboard-home__quick-actions">
-          {quickActions.map((action) => (
+          {visibleQuickActions.map((action) => (
             <Link key={`${action.to}-${action.label}`} to={action.to} className="admin-dashboard-home__quick-action">
               <p className="admin-dashboard-home__quick-action-title">{action.label}</p>
               <p className="app-copy-sm">{action.copy}</p>
@@ -372,9 +379,11 @@ export default function AdminDashboardHome({ profile }) {
           <div className="admin-dashboard-home__priority-panel admin-dashboard-home__priority-panel--slate">
             <div className="admin-dashboard-home__priority-head">
               <p className="admin-dashboard-home__priority-title">Unassigned Guards</p>
-              <Link className="admin-link" to="/admin/users">
-                Manage Users
-              </Link>
+              {isSuperAdmin ? (
+                <Link className="admin-link" to="/admin/users">
+                  Manage Users
+                </Link>
+              ) : null}
             </div>
             <div className="admin-dashboard-home__priority-list">
               {priorityQueues.unassignedGuards.map((row) => (

@@ -13,6 +13,7 @@ import janitorLoginHalfbody from "../../assets/janitor.jpg";
 import securityGuardHalfBody from "../../assets/security-guard-half-body.png";
 import cgroupHeroLogo from "../../assets/employee-card-bg.jpg";
 import { getPortalConfig, portalConfigs, selectorItems } from "./portalConfig";
+import { isAdminRole } from "../../lib/roles";
 import "./LoginPage.css";
 
 const AUTH_REQUEST_TIMEOUT_MS = 15000;
@@ -106,7 +107,7 @@ export default function LoginPage() {
 
         if (profileError) throw profileError;
 
-        if (adminProfile?.role !== "admin") {
+        if (!isAdminRole(adminProfile?.role)) {
           await supabase.auth.signOut().catch(() => { });
           setScreenPopup("You can't access this area.");
           throw new Error("You can't access this area.");

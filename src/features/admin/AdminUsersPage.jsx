@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import toast from "react-hot-toast";
 import Card from "../../components/ui/Card";
@@ -11,12 +12,14 @@ import PendingProfileRequestsList from "./users/PendingProfileRequestsList";
 import PeopleDirectoryTable from "./users/PeopleDirectoryTable";
 import ProfileRequestReviewModal from "./users/ProfileRequestReviewModal";
 import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
+import { isAdminRole, isSuperAdminRole } from "../../lib/roles";
 import "./AdminUsersPage.css";
 
 const POSITION_OPTIONS = ["CGroup Access", "Security Guard", "Janitor", "Area Supervisor"];
 const SUPERVISOR_POSITION = "Area Supervisor";
 
 export default function AdminUsersPage({ profile }) {
+  const canManageUsers = isSuperAdminRole(profile?.role);
   const [filters, setFilters] = useState({ role: "All", location: "All", q: "" });
   const [requestFilters, setRequestFilters] = useState({ status: "Pending Review", q: "" });
   const [savingId, setSavingId] = useState(null);
@@ -32,7 +35,7 @@ export default function AdminUsersPage({ profile }) {
     patchProfilesByIds,
     patchProfileRequestsByIds,
   } = useLivePeopleStore({
-    currentRole: "admin",
+    currentRole: canManageUsers ? "admin" : "employee",
     currentUserId: profile?.id,
     scopeProfile: profile,
   });
@@ -53,7 +56,7 @@ export default function AdminUsersPage({ profile }) {
       role,
       ...(role === "supervisor"
         ? { position: SUPERVISOR_POSITION, branch: null, supervisor_user_id: null, supervisor: null }
-        : role === "admin"
+        : isAdminRole(role)
           ? { supervisor_user_id: null, supervisor: null }
           : {}),
     };
@@ -264,6 +267,10 @@ export default function AdminUsersPage({ profile }) {
     [profileRequests]
   );
 
+  if (!canManageUsers) {
+    return <Navigate to="/admin" replace />;
+  }
+
   if (loading) {
     return <p className="admin-loading-copy">Loading employee records...</p>;
   }
@@ -312,7 +319,8 @@ export default function AdminUsersPage({ profile }) {
             <option>All</option>
             <option>employee</option>
             <option>supervisor</option>
-            <option>admin</option>
+            <option>super_admin</option>
+            <option>admin_ops</option>
           </Select>
           <Select
             label="Location"

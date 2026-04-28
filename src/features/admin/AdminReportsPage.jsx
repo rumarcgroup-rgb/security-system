@@ -4,6 +4,7 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import { sortAreas } from "../../lib/areas";
 import { getCutoffLabelFromDate } from "../../lib/dtr";
+import { isAdminRole } from "../../lib/roles";
 import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
 import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
 import { useLiveRequirementsStore } from "../realtime/useLiveRequirementsStore";
@@ -141,7 +142,7 @@ export default function AdminReportsPage({ profile }) {
     }, new Map());
 
     return profiles
-      .filter((item) => item.role !== "admin")
+      .filter((item) => !isAdminRole(item.role))
       .map((employee) => {
         const dtr = latestDtrByUserId.get(employee.id) || null;
         const fileIssues = requirementIssuesByUserId.get(employee.id) || 0;

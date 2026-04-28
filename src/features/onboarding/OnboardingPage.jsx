@@ -9,6 +9,7 @@ import Select from "../../components/ui/Select";
 import { AREA_OPTIONS } from "../../lib/areas";
 import { getBranchesForArea } from "../../lib/branches";
 import { saveEmployeePortalType } from "../../lib/employeePortal";
+import { isAdminRole } from "../../lib/roles";
 import { supabase } from "../../lib/supabase";
 import "./OnboardingPage.css";
 
@@ -119,7 +120,7 @@ export default function OnboardingPage({ user, profile, refreshProfile }) {
 
   useEffect(() => {
     if (!user || !profile) return;
-    navigate(profile.role === "admin" ? "/admin" : "/", { replace: true });
+    navigate(isAdminRole(profile.role) ? "/admin" : "/", { replace: true });
   }, [navigate, profile, user]);
 
   useEffect(() => {

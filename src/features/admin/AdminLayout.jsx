@@ -8,17 +8,18 @@ import { useMessageUnreadCount } from "../messaging/useMessageUnreadCount";
 import { useLiveDtrStore } from "../realtime/useLiveDtrStore";
 import { useLiveRequirementsStore } from "../realtime/useLiveRequirementsStore";
 import { useLivePeopleStore } from "../realtime/useLivePeopleStore";
+import { isSuperAdminRole } from "../../lib/roles";
 import "./AdminLayout.css";
 
 const items = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/dtr-submissions", label: "DTR Submissions", icon: FileClock },
   { to: "/admin/requirements", label: "Requirements", icon: Files },
-  { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/users", label: "Users", icon: Users, superAdminOnly: true },
   { to: "/admin/messages", label: "Messages", icon: MessageSquareText },
   { to: "/admin/reports", label: "Reports", icon: FileBarChart2 },
   { to: "/admin/help", label: "Help", icon: CircleHelp },
-  { to: "/admin/settings", label: "Settings", icon: Settings },
+  { to: "/admin/settings", label: "Settings", icon: Settings, superAdminOnly: true },
 ];
 
 export default function AdminLayout({ profile }) {
@@ -28,6 +29,7 @@ export default function AdminLayout({ profile }) {
   const [seenNotificationIds, setSeenNotificationIds] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isSuperAdmin = isSuperAdminRole(profile?.role);
   const unreadMessageCount = useMessageUnreadCount({ currentRole: "admin", currentUserId: profile?.id });
   const { rows: dtrRows } = useLiveDtrStore({
     currentRole: "admin",
@@ -40,10 +42,14 @@ export default function AdminLayout({ profile }) {
     scopeProfile: profile,
   });
   const { profileRequests } = useLivePeopleStore({
-    currentRole: "admin",
+    currentRole: isSuperAdmin ? "admin" : "employee",
     currentUserId: profile?.id,
     scopeProfile: profile,
   });
+  const navItems = useMemo(
+    () => items.filter((item) => !item.superAdminOnly || isSuperAdmin),
+    [isSuperAdmin]
+  );
 
   useEffect(() => {
     function syncSidebarMode() {
@@ -158,7 +164,7 @@ export default function AdminLayout({ profile }) {
           <p className="admin-layout__brand">CGROUP of COMPANIES Admin</p>
         </div>
         <nav className="admin-layout__nav">
-          {items.map(({ to, label, icon: Icon, end }) => (
+          {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}

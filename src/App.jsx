@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
 import RoleRoute from "./components/layout/RoleRoute";
+import { ADMIN_ROLES, isAdminRole } from "./lib/roles";
 
 const LoginPage = lazy(() => import("./features/auth/LoginPage"));
 const ResetPasswordPage = lazy(() => import("./features/auth/ResetPasswordPage"));
@@ -63,20 +64,22 @@ export default function App() {
           }
         >
             <Route
-              element={<RoleRoute allowedRole="admin" profile={profile} fallback="/" />}
+              element={<RoleRoute allowedRole={ADMIN_ROLES} profile={profile} fallback="/" />}
             >
             <Route path="/admin" element={<AdminLayout profile={profile} />}>
               <Route index element={<AdminDashboardHome profile={profile} />} />
               <Route path="dtr-submissions" element={<AdminDtrPage profile={profile} />} />
               <Route path="requirements" element={<AdminRequirementsPage profile={profile} />} />
-              <Route path="users" element={<AdminUsersPage profile={profile} />} />
               <Route path="messages" element={<AdminMessagesPage profile={profile} />} />
               <Route path="reports" element={<AdminReportsPage profile={profile} />} />
               <Route path="help" element={<WebsiteHelpPage profile={profile} />} />
-              <Route
-                path="settings"
-                element={<AdminSettingsPage profile={profile} refreshProfile={refreshProfile} />}
-              />
+              <Route element={<RoleRoute allowedRole={["super_admin", "admin"]} profile={profile} fallback="/admin" />}>
+                <Route path="users" element={<AdminUsersPage profile={profile} />} />
+                <Route
+                  path="settings"
+                  element={<AdminSettingsPage profile={profile} refreshProfile={refreshProfile} />}
+                />
+              </Route>
             </Route>
           </Route>
 
@@ -103,7 +106,7 @@ export default function App() {
             element={
               !profile ? (
                 <Navigate to="/onboarding" replace />
-              ) : profile.role === "admin" ? (
+              ) : isAdminRole(profile.role) ? (
                 <Navigate to="/admin" replace />
               ) : profile.role === "supervisor" ? (
                 <Navigate to="/supervisor" replace />

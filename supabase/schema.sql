@@ -220,6 +220,10 @@ update public.profiles
 set branch = 'Main'
 where branch is null or trim(branch) = '';
 
+update public.profiles
+set role = 'super_admin'
+where role = 'admin';
+
 do $$
 begin
   if not exists (
@@ -280,6 +284,16 @@ begin
     alter table public.profiles
       add constraint profiles_signature_status_check
       check (signature_status in ('Pending Review', 'Verified', 'Needs Reupload'));
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'profiles_role_check'
+  ) then
+    alter table public.profiles
+      add constraint profiles_role_check
+      check (role in ('employee', 'supervisor', 'super_admin', 'admin_ops', 'admin'));
   end if;
 
   if not exists (
@@ -504,7 +518,7 @@ begin
     select 1
     from public.profiles
     where id = check_user_id
-      and role = 'admin'
+      and role in ('admin', 'super_admin', 'admin_ops')
   );
 exception
   when others then
@@ -514,6 +528,78 @@ $$;
 
 revoke all on function public.is_admin(uuid) from public;
 grant execute on function public.is_admin(uuid) to authenticated, service_role;
+
+create or replace function public.is_super_admin(check_user_id uuid default auth.uid())
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if check_user_id is null then
+    return false;
+  end if;
+
+  return exists (
+    select 1
+    from public.profiles
+    where id = check_user_id
+      and role in ('super_admin', 'admin')
+  );
+exception
+  when others then
+    return false;
+end;
+$$;
+
+revoke all on function public.is_super_admin(uuid) from public;
+grant execute on function public.is_super_admin(uuid) to authenticated, service_role;
+
+create or replace function public.is_admin_ops(check_user_id uuid default auth.uid())
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if check_user_id is null then
+    return false;
+  end if;
+
+  return exists (
+    select 1
+    from public.profiles
+    where id = check_user_id
+      and role = 'admin_ops'
+  );
+exception
+  when others then
+    return false;
+end;
+$$;
+
+revoke all on function public.is_admin_ops(uuid) from public;
+grant execute on function public.is_admin_ops(uuid) to authenticated, service_role;
+
+create or replace function public.is_any_admin(check_user_id uuid default auth.uid())
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  return public.is_super_admin(check_user_id) or public.is_admin_ops(check_user_id);
+exception
+  when others then
+    return false;
+end;
+$$;
+
+revoke all on function public.is_any_admin(uuid) from public;
+grant execute on function public.is_any_admin(uuid) to authenticated, service_role;
 
 create or replace function public.get_admin_system_health()
 returns jsonb
@@ -536,10 +622,16 @@ declare
   ];
   realtime_enabled boolean;
   realtime_tables jsonb;
+  current_profile_role text;
 begin
-  if not public.is_admin(auth.uid()) then
-    raise exception 'Admin access required.';
+  if not public.is_super_admin(auth.uid()) then
+    raise exception 'Super admin access required.';
   end if;
+
+  select role
+  into current_profile_role
+  from public.profiles
+  where id = auth.uid();
 
   select exists (
     select 1
@@ -558,7 +650,7 @@ begin
   return jsonb_build_object(
     'checked_at', now(),
     'profile_id', auth.uid(),
-    'profile_role', 'admin',
+    'profile_role', coalesce(current_profile_role, 'unknown'),
     'realtime_publication_exists', realtime_enabled,
     'required_realtime_tables', to_jsonb(required_realtime_tables),
     'enabled_realtime_tables', realtime_tables,
@@ -580,7 +672,7 @@ exception
     return jsonb_build_object(
       'checked_at', now(),
       'profile_id', auth.uid(),
-      'profile_role', 'admin',
+      'profile_role', coalesce(current_profile_role, 'unknown'),
       'realtime_publication_exists', false,
       'required_realtime_tables', to_jsonb(required_realtime_tables),
       'enabled_realtime_tables', '[]'::jsonb,
@@ -704,7 +796,7 @@ begin
   from public.profiles
   where id = target_user_id;
 
-  if not found or target_role = 'admin' then
+  if not found or public.is_any_admin(target_user_id) then
     return false;
   end if;
 
@@ -745,7 +837,7 @@ begin
         thread.employee_user_id = check_user_id
         or thread.supervisor_user_id = check_user_id
         or (
-          public.is_admin(check_user_id)
+          public.is_any_admin(check_user_id)
           and (thread.supervisor_user_id is null or thread.escalated_to_admin)
         )
       )
@@ -829,7 +921,7 @@ begin
 
   new.sender_role :=
     case
-      when profile_role = 'admin' then 'admin'
+      when profile_role in ('admin', 'super_admin', 'admin_ops') then 'admin'
       when profile_role = 'supervisor' then 'supervisor'
       else 'employee'
     end;
@@ -1135,7 +1227,7 @@ begin
       and (
         supervisor_user_id = auth.uid()
         or (
-          public.is_admin(auth.uid())
+          public.is_any_admin(auth.uid())
           and (supervisor_user_id is null or escalated_to_admin)
         )
       )
@@ -1315,15 +1407,15 @@ create policy "users_can_select_own_profile"
 on public.profiles for select
 using (
   auth.uid() = id
-  or public.is_admin(auth.uid())
+  or public.is_any_admin(auth.uid())
   or public.is_supervisor_for_employee(id, auth.uid())
 );
 
 drop policy if exists "users_can_upsert_own_profile" on public.profiles;
 create policy "users_can_upsert_own_profile"
 on public.profiles for all
-using (auth.uid() = id or public.is_admin(auth.uid()))
-with check (auth.uid() = id or public.is_admin(auth.uid()));
+using (auth.uid() = id or public.is_super_admin(auth.uid()))
+with check (auth.uid() = id or public.is_super_admin(auth.uid()));
 
 drop policy if exists "users_can_manage_own_dtr" on public.dtr_submissions;
 drop policy if exists "users_can_select_scoped_dtr" on public.dtr_submissions;
@@ -1331,7 +1423,7 @@ create policy "users_can_select_scoped_dtr"
 on public.dtr_submissions for select
 using (
   auth.uid() = user_id
-  or public.is_admin(auth.uid())
+  or public.is_any_admin(auth.uid())
   or public.is_supervisor_for_employee(user_id, auth.uid())
 );
 
@@ -1340,7 +1432,7 @@ create policy "users_can_insert_scoped_dtr"
 on public.dtr_submissions for insert
 with check (
   auth.uid() = user_id
-  or public.is_admin(auth.uid())
+  or public.is_any_admin(auth.uid())
   or public.is_supervisor_for_employee(user_id, auth.uid())
 );
 
@@ -1348,30 +1440,30 @@ drop policy if exists "admins_and_supervisors_can_update_dtr" on public.dtr_subm
 create policy "admins_and_supervisors_can_update_dtr"
 on public.dtr_submissions for update
 using (
-  public.is_admin(auth.uid())
+  public.is_any_admin(auth.uid())
   or public.is_supervisor_for_employee(user_id, auth.uid())
 )
 with check (
-  public.is_admin(auth.uid())
+  public.is_any_admin(auth.uid())
   or public.is_supervisor_for_employee(user_id, auth.uid())
 );
 
 drop policy if exists "admins_can_delete_dtr" on public.dtr_submissions;
 create policy "admins_can_delete_dtr"
 on public.dtr_submissions for delete
-using (public.is_admin(auth.uid()));
+using (public.is_super_admin(auth.uid()));
 
 drop policy if exists "users_can_manage_own_documents" on public.employee_documents;
 create policy "users_can_manage_own_documents"
 on public.employee_documents for all
 using (
   auth.uid() = user_id
-  or public.is_admin(auth.uid())
+  or public.is_any_admin(auth.uid())
   or public.is_supervisor_for_employee(user_id, auth.uid())
 )
 with check (
   auth.uid() = user_id
-  or public.is_admin(auth.uid())
+  or public.is_any_admin(auth.uid())
   or public.is_supervisor_for_employee(user_id, auth.uid())
 );
 
@@ -1380,20 +1472,20 @@ create policy "users_can_manage_own_presence"
 on public.employee_presence for all
 using (
   auth.uid() = user_id
-  or public.is_admin(auth.uid())
+  or public.is_any_admin(auth.uid())
   or public.is_supervisor_for_employee(user_id, auth.uid())
 )
 with check (
   auth.uid() = user_id
-  or public.is_admin(auth.uid())
+  or public.is_any_admin(auth.uid())
   or public.is_supervisor_for_employee(user_id, auth.uid())
 );
 
 drop policy if exists "users_can_manage_own_profile_change_requests" on public.profile_change_requests;
 create policy "users_can_manage_own_profile_change_requests"
 on public.profile_change_requests for all
-using (auth.uid() = user_id or public.is_admin(auth.uid()))
-with check (auth.uid() = user_id or public.is_admin(auth.uid()));
+using (auth.uid() = user_id or public.is_super_admin(auth.uid()))
+with check (auth.uid() = user_id or public.is_super_admin(auth.uid()));
 
 drop policy if exists "message_thread_participants_can_select" on public.message_threads;
 create policy "message_thread_participants_can_select"
@@ -1416,13 +1508,13 @@ with check (
 drop policy if exists "admins_can_update_message_threads" on public.message_threads;
 create policy "admins_can_update_message_threads"
 on public.message_threads for update
-using (public.is_admin(auth.uid()))
-with check (public.is_admin(auth.uid()));
+using (public.is_any_admin(auth.uid()))
+with check (public.is_any_admin(auth.uid()));
 
 drop policy if exists "admins_can_delete_message_threads" on public.message_threads;
 create policy "admins_can_delete_message_threads"
 on public.message_threads for delete
-using (public.is_admin(auth.uid()));
+using (public.is_super_admin(auth.uid()));
 
 drop policy if exists "message_thread_participants_can_select_messages" on public.message_messages;
 create policy "message_thread_participants_can_select_messages"
@@ -1440,7 +1532,7 @@ with check (
 drop policy if exists "admins_can_delete_messages" on public.message_messages;
 create policy "admins_can_delete_messages"
 on public.message_messages for delete
-using (public.is_admin(auth.uid()));
+using (public.is_super_admin(auth.uid()));
 
 drop policy if exists "message_thread_participants_can_select_read_states" on public.message_read_states;
 create policy "message_thread_participants_can_select_read_states"
@@ -1462,7 +1554,7 @@ with check (
 drop policy if exists "admins_can_select_audit_logs" on public.audit_logs;
 create policy "admins_can_select_audit_logs"
 on public.audit_logs for select
-using (public.is_admin(auth.uid()));
+using (public.is_super_admin(auth.uid()));
 
 drop policy if exists "service_role_can_manage_audit_logs" on public.audit_logs;
 create policy "service_role_can_manage_audit_logs"
@@ -1499,7 +1591,7 @@ using (
   bucket_id = 'dtr-images'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.is_admin(auth.uid())
+    or public.is_any_admin(auth.uid())
     or exists (
       select 1
       from public.profiles
@@ -1516,7 +1608,7 @@ with check (
   bucket_id = 'dtr-images'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.is_admin(auth.uid())
+    or public.is_any_admin(auth.uid())
     or exists (
       select 1
       from public.profiles
@@ -1533,14 +1625,14 @@ using (
   bucket_id = 'dtr-images'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.is_admin(auth.uid())
+    or public.is_super_admin(auth.uid())
   )
 )
 with check (
   bucket_id = 'dtr-images'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.is_admin(auth.uid())
+    or public.is_super_admin(auth.uid())
   )
 );
 
@@ -1551,7 +1643,7 @@ using (
   bucket_id = 'dtr-images'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.is_admin(auth.uid())
+    or public.is_super_admin(auth.uid())
   )
 );
 
@@ -1563,7 +1655,7 @@ using (
   bucket_id = 'documents'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.is_admin(auth.uid())
+    or public.is_any_admin(auth.uid())
     or exists (
       select 1
       from public.profiles
@@ -1580,7 +1672,7 @@ with check (
   bucket_id = 'documents'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.is_admin(auth.uid())
+    or public.is_any_admin(auth.uid())
   )
 );
 
@@ -1591,14 +1683,14 @@ using (
   bucket_id = 'documents'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.is_admin(auth.uid())
+    or public.is_super_admin(auth.uid())
   )
 )
 with check (
   bucket_id = 'documents'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.is_admin(auth.uid())
+    or public.is_super_admin(auth.uid())
   )
 );
 
@@ -1609,6 +1701,6 @@ using (
   bucket_id = 'documents'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.is_admin(auth.uid())
+    or public.is_super_admin(auth.uid())
   )
 );

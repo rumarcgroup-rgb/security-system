@@ -1,3 +1,5 @@
+import { isAdminRole } from "../../lib/roles";
+
 export const MESSAGE_THREAD_SUMMARY_SELECT = `
   id,
   employee_user_id,
@@ -27,7 +29,7 @@ export function applyMessageThreadScope(query, { currentRole, currentUserId }) {
     return query.eq("supervisor_user_id", currentUserId);
   }
 
-  if (currentRole === "admin") {
+  if (isAdminRole(currentRole)) {
     return query.or("supervisor_user_id.is.null,escalated_to_admin.eq.true");
   }
 
@@ -75,7 +77,7 @@ export function getThreadParticipantRole(thread, userId) {
 }
 
 export function getRoleDisplayName(role) {
-  if (role === "admin") return "Admin";
+  if (isAdminRole(role)) return "Admin";
   if (role === "supervisor") return "Supervisor";
   return "Employee";
 }

@@ -1,16 +1,18 @@
 import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
+import { isAdminRole } from "../../lib/roles";
 import manualOutline from "../../../docs/website-user-manual-outline.json";
 import "./WebsiteHelpPage.css";
 
 function getHomePath(role) {
-  if (role === "admin") return "/admin";
+  if (isAdminRole(role)) return "/admin";
   if (role === "supervisor") return "/supervisor";
   return "/";
 }
 
 function shouldShowPage(page, role) {
-  return page.role === "all" || page.role === role || (role === "employee" && page.role === "guard");
+  const normalizedRole = isAdminRole(role) ? "admin" : role;
+  return page.role === "all" || page.role === normalizedRole || (normalizedRole === "employee" && page.role === "guard");
 }
 
 export default function WebsiteHelpPage({ profile }) {
