@@ -2,6 +2,7 @@ import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabase";
 import { attachSignedUrls } from "../../lib/storage";
 import { isScopedEmployee } from "../../lib/supervisorScope";
+import { isSuperAdminRole } from "../../lib/roles";
 import { createRealtimeRuntime, createScopedRealtimeStore } from "./createScopedRealtimeStore";
 
 const PROFILE_REQUEST_SELECT = `
@@ -154,7 +155,7 @@ async function fetchProfileById(profileId, params) {
 }
 
 async function fetchProfileRequests(params, { requestId = null, userId = null } = {}) {
-  if (params.currentRole === "supervisor") {
+  if (params.currentRole === "supervisor" || !isSuperAdminRole(params.scopeProfile?.role)) {
     return [];
   }
 
@@ -180,7 +181,7 @@ async function fetchProfileRequests(params, { requestId = null, userId = null } 
 }
 
 async function fetchProfileRequestById(requestId, params) {
-  if (!requestId || params.currentRole === "supervisor") return null;
+  if (!requestId || params.currentRole === "supervisor" || !isSuperAdminRole(params.scopeProfile?.role)) return null;
 
   const { data, error } = await supabase
     .from("profile_change_requests")
@@ -327,7 +328,7 @@ function createPeopleStore(params) {
           applyPresenceRow(payload.new);
         });
 
-      if (params.currentRole !== "supervisor") {
+      if (params.currentRole !== "supervisor" && isSuperAdminRole(params.scopeProfile?.role)) {
         const requestSubscription = {
           event: "*",
           schema: "public",
@@ -536,7 +537,7 @@ function createPeopleStore(params) {
   }
 
   async function syncProfileRequestsByUserId(userId) {
-    if (!userId || params.currentRole === "supervisor") return;
+    if (!userId || params.currentRole === "supervisor" || !isSuperAdminRole(params.scopeProfile?.role)) return;
 
     const nextRequests = await fetchProfileRequests(params, { userId });
 

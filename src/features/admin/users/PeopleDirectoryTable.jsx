@@ -3,6 +3,7 @@ import { ShieldCheck, UserRound } from "lucide-react";
 import Button from "../../../components/ui/Button";
 import Select from "../../../components/ui/Select";
 import PresenceBadge from "./PresenceBadge";
+import { isAdminRole } from "../../../lib/roles";
 
 export default function PeopleDirectoryTable({ profiles, savingId, onUpdateRole, onOpenAssignmentEditor }) {
   return (
@@ -27,7 +28,7 @@ export default function PeopleDirectoryTable({ profiles, savingId, onUpdateRole,
                     <div className="app-avatar app-avatar--panel app-avatar--sm admin-users-page__avatar">
                       {profile.preview_url ? (
                         <img src={profile.preview_url} alt={profile.full_name || "User"} className="app-media-cover" />
-                      ) : profile.role === "admin" ? (
+                      ) : isAdminRole(profile.role) ? (
                         <ShieldCheck size={18} />
                       ) : (
                         <UserRound size={18} />
@@ -76,15 +77,16 @@ export default function PeopleDirectoryTable({ profiles, savingId, onUpdateRole,
                     <Select value={profile.role} onChange={(e) => onUpdateRole(profile.id, e.target.value)} disabled={savingId === profile.id}>
                       <option value="employee">employee</option>
                       <option value="supervisor">supervisor</option>
-                      <option value="admin">admin</option>
+                      <option value="super_admin">super_admin</option>
+                      <option value="admin_ops">admin_ops</option>
                     </Select>
                     <Button
                       variant="secondary"
                       className="admin-button-full"
                       loading={savingId === profile.id}
-                      onClick={() => onUpdateRole(profile.id, profile.role === "admin" ? "employee" : "admin")}
+                      onClick={() => onUpdateRole(profile.id, isAdminRole(profile.role) ? "employee" : "admin_ops")}
                     >
-                      {profile.role === "admin" ? "Make Employee" : "Make Admin"}
+                      {isAdminRole(profile.role) ? "Make Employee" : "Make Admin Ops"}
                     </Button>
                   </div>
                 </td>
